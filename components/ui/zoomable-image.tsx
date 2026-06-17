@@ -104,9 +104,10 @@ export function ZoomableImage({
               draggable={false}
               style={{
                 width: `${scale * 100}%`,
+                maxWidth: "none",
                 transform: `rotate(${rot}deg)`,
               }}
-              className="mx-auto h-auto origin-center select-none transition-transform"
+              className="mx-auto block h-auto origin-center select-none transition-[width]"
             />
           </div>
         </DialogContent>

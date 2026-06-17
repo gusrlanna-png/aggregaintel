@@ -76,9 +76,13 @@ export function classificaProduto(desc?: string | null): ProdutoTipo | "" {
 }
 
 export function ocrToForm(ocr: OCRResult): NFFormValues {
+  // A chave de acesso da NF-e (44 dígitos) contém o CNPJ do emitente nos
+  // dígitos 7–20. Se o OCR não leu o CNPJ direto, derivamos da chave.
+  const chaveDigits = s(ocr.nf?.chave_acesso).replace(/\D/g, "");
+  const cnpjDaChave = chaveDigits.length === 44 ? chaveDigits.slice(6, 20) : "";
   return {
     emissor_razao: s(ocr.emissor?.razao_social),
-    emissor_cnpj: s(ocr.emissor?.cnpj),
+    emissor_cnpj: s(ocr.emissor?.cnpj).replace(/\D/g, "") || cnpjDaChave,
     emissor_logradouro: s(ocr.emissor?.logradouro),
     emissor_municipio: s(ocr.emissor?.municipio),
     emissor_uf: s(ocr.emissor?.uf),

@@ -232,6 +232,7 @@ export function NFReviewForm({
       const m = emissoresList.find((e) => onlyDigits(e.cnpj) === cnpj);
       if (m) {
         setEmissorSelId(m.id);
+        preencherDeEmissor(m);
         return;
       }
     }
@@ -242,6 +243,7 @@ export function NFReviewForm({
       );
       if (m) {
         setEmissorSelId(m.id);
+        preencherDeEmissor(m);
         return;
       }
     }
@@ -264,6 +266,17 @@ export function NFReviewForm({
       emissor_cnpj: e.cnpj || "",
       emissor_municipio: e.municipio || f.emissor_municipio,
       emissor_uf: e.uf || f.emissor_uf,
+    }));
+  }
+
+  // Ao casar automaticamente, completa os campos vazios com os dados do cadastro
+  // (ex.: CNPJ que o OCR não leu, mas o produtor já tem cadastrado).
+  function preencherDeEmissor(e: Emissor) {
+    setForm((f) => ({
+      ...f,
+      emissor_cnpj: f.emissor_cnpj || e.cnpj || "",
+      emissor_municipio: f.emissor_municipio || e.municipio || "",
+      emissor_uf: f.emissor_uf || e.uf || "",
     }));
   }
 

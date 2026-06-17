@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { getNFById } from "@/lib/supabase/nf";
 import { getNFUrl } from "@/lib/supabase/storage";
+import { ZoomableImage } from "@/components/ui/zoomable-image";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
   fmtReais,
@@ -246,12 +247,7 @@ export default function NFDetailPage() {
             </CardHeader>
             <CardContent className="pt-0">
               {imgUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={imgUrl}
-                  alt="NF"
-                  className="w-full rounded-md border"
-                />
+                <ZoomableImage src={imgUrl} alt="NF" />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {isSupabaseConfigured()

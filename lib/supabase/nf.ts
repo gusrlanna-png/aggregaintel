@@ -276,6 +276,63 @@ async function upsertSerie(
   }
 }
 
+/**
+ * Busca NFs para a pesquisa global. Por número (dígitos) ou nome do emissor.
+ * Retorna no máximo `limite` resultados, mais recentes primeiro.
+ */
+export async function searchNFs(
+  termo: string,
+  limite = 8
+): Promise<NotaFiscal[]> {
+  const q = (termo ?? "").trim();
+  const dig = q.replace(/\D/g, "");
+  if (!q) return [];
+
+  if (!isSupabaseConfigured()) {
+    const rows = localList<NotaFiscal>("notas_fiscais").map(hydrate);
+    return rows
+      .filter(
+        (n) =>
+          (dig && String(n.numero_nf).includes(dig)) ||
+          (n.emissor?.razao_social ?? "")
+            .toLowerCase()
+            .includes(q.toLowerCase())
+      )
+      .slice(0, limite);
+  }
+
+  const supabase = createClient();
+  const select =
+    "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)";
+
+  // Por número exato (uso mais comum no balcão).
+  if (dig) {
+    const { data } = await supabase
+      .from("notas_fiscais")
+      .select(select)
+      .eq("numero_nf", Number(dig))
+      .order("data_emissao", { ascending: false })
+      .limit(limite);
+    return (data ?? []) as NotaFiscal[];
+  }
+
+  // Por nome do emissor (texto): resolve emissores e busca NFs deles.
+  const { data: ems } = await supabase
+    .from("emissores")
+    .select("id")
+    .ilike("razao_social", `%${q}%`)
+    .limit(5);
+  const ids = (ems ?? []).map((e) => e.id);
+  if (ids.length === 0) return [];
+  const { data } = await supabase
+    .from("notas_fiscais")
+    .select(select)
+    .in("emissor_id", ids)
+    .order("data_emissao", { ascending: false })
+    .limit(limite);
+  return (data ?? []) as NotaFiscal[];
+}
+
 export async function countNFsMesAtual(): Promise<number> {
   const inicio = new Date();
   inicio.setDate(1);

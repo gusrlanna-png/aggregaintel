@@ -27,6 +27,7 @@ import {
   type RankingRow,
 } from "@/components/charts/ranking-producoes";
 import { AlertasFeed } from "@/components/dashboard/alertas-feed";
+import { GlobalSearch } from "@/components/search/global-search";
 import { getProjecaoResumo } from "@/lib/supabase/emissores";
 import { countNFsMesAtual } from "@/lib/supabase/nf";
 import { getIntel } from "@/lib/supabase/intel";
@@ -124,6 +125,8 @@ export default function DashboardPage() {
           {isSupabaseConfigured() ? "dados ao vivo" : "armazenamento local"}
         </p>
       </div>
+
+      <GlobalSearch variant="hero" />
 
       {isLoading ? (
         <div className="flex justify-center py-12">

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/search/global-search";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -31,7 +32,8 @@ export function AppHeader() {
           </span>
           <span className="text-base font-bold tracking-tight">AggregaIntel</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <GlobalSearch variant="header" />
           {demo && (
             <Badge variant="warning" className="hidden sm:inline-flex">
               Modo demonstração

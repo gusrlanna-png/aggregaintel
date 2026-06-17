@@ -19,14 +19,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ProjecaoUI } from "@/components/concorrentes/projecao-ui";
 import { AnaliseMercado } from "@/components/concorrentes/analise-mercado";
 import { CfemPainel } from "@/components/concorrentes/cfem-painel";
@@ -50,12 +42,11 @@ import {
   getLinksEmpresa,
 } from "@/lib/supabase/cadastro-empresa";
 import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
+import { EmissorNFsTab } from "@/components/concorrentes/emissor-nfs-tab";
 import {
   isMbvEmissor,
-  fmtToneladas1,
   fmtNumero,
   fmtReais,
-  labelProduto,
 } from "@/lib/utils/agregados";
 
 const MapaEditavel = dynamic(
@@ -544,48 +535,7 @@ export default function ConcorrenteDetailPage() {
         </TabsContent>
 
         <TabsContent value="nfs">
-          <Card>
-            <CardContent className="p-0">
-              {nfs.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma NF capturada para este produtor.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>NF</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Qtd (t)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {nfs.map((nf) => (
-                      <TableRow key={nf.id}>
-                        <TableCell className="font-medium">
-                          <Link
-                            href={`/nf/${nf.id}`}
-                            className="hover:underline"
-                          >
-                            {nf.numero_nf}
-                            {nf.serie ? `/${nf.serie}` : ""}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {nf.data_emissao}
-                        </TableCell>
-                        <TableCell>{labelProduto(nf.produto_tipo)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {fmtToneladas1(nf.quantidade_ton)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+          <EmissorNFsTab nfs={nfs} emissorId={emissor.id} />
         </TabsContent>
 
         <TabsContent value="cfem">

@@ -2,7 +2,17 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, Save } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  Building2,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Save,
+  Search,
+  Unlink,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,8 +34,13 @@ import {
   NumberInput,
 } from "@/components/ui/masked-input";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
+import { EmissorPicker } from "@/components/nf/emissor-picker";
 import { cn } from "@/lib/utils";
 import { saveNFFromForm } from "@/lib/utils/save-nf-from-form";
+import { getEmissores } from "@/lib/supabase/emissores";
+import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
+import { isValidCNPJ, onlyDigits } from "@/lib/utils/masks";
+import type { Emissor } from "@/lib/supabase/types";
 import {
   PRODUTO_TIPOS,
   fmtReais,
@@ -173,6 +188,17 @@ export function NFReviewForm({
   const router = useRouter();
   const [form, setForm] = React.useState<NFFormValues>(initial);
   const [saving, setSaving] = React.useState(false);
+  // Produtor vinculado (existente). null = produtor novo / a cadastrar.
+  const [emissorSelId, setEmissorSelId] = React.useState<string | null>(
+    emissorId ?? null
+  );
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
+
+  const { data: emissoresList = [] } = useQuery({
+    queryKey: ["emissores-all"],
+    queryFn: () => getEmissores(),
+  });
 
   const onChangeRef = React.useRef(onFormChange);
   onChangeRef.current = onFormChange;
@@ -182,6 +208,78 @@ export function NFReviewForm({
 
   const set = <K extends keyof NFFormValues>(key: K, v: NFFormValues[K]) =>
     setForm((f) => ({ ...f, [key]: v }));
+
+  // Edição manual do emissor "desvincula" o produtor (passa a tratar como novo).
+  const setEmissorField = <K extends keyof NFFormValues>(
+    key: K,
+    v: NFFormValues[K]
+  ) => {
+    setEmissorSelId(null);
+    set(key, v);
+  };
+
+  // Tenta casar o emissor lido (OCR) com um produtor cadastrado (CNPJ → razão).
+  React.useEffect(() => {
+    if (emissorSelId || emissoresList.length === 0) return;
+    const cnpj = onlyDigits(form.emissor_cnpj);
+    if (cnpj.length >= 11) {
+      const m = emissoresList.find((e) => onlyDigits(e.cnpj) === cnpj);
+      if (m) {
+        setEmissorSelId(m.id);
+        return;
+      }
+    }
+    const nome = form.emissor_razao.trim().toLowerCase();
+    if (nome) {
+      const m = emissoresList.find(
+        (e) => e.razao_social.trim().toLowerCase() === nome
+      );
+      if (m) setEmissorSelId(m.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emissoresList]);
+
+  const emissorSel = emissoresList.find((e) => e.id === emissorSelId) ?? null;
+
+  function vincularEmissor(e: Emissor) {
+    setEmissorSelId(e.id);
+    setForm((f) => ({
+      ...f,
+      emissor_razao: e.razao_social,
+      emissor_cnpj: e.cnpj || "",
+      emissor_municipio: e.municipio || f.emissor_municipio,
+      emissor_uf: e.uf || f.emissor_uf,
+    }));
+  }
+
+  async function buscarReceitaEmissor() {
+    const d = onlyDigits(form.emissor_cnpj);
+    if (d.length !== 14) {
+      toast.error("Informe um CNPJ com 14 dígitos.");
+      return;
+    }
+    setBuscandoCnpj(true);
+    try {
+      const c = await buscarCadastroCnpj(d);
+      setForm((f) => ({
+        ...f,
+        emissor_razao: c.razao_social || f.emissor_razao,
+        emissor_municipio: c.municipio || f.emissor_municipio,
+        emissor_uf: c.uf || f.emissor_uf,
+      }));
+      toast.success(`Dados de ${c.razao_social ?? "CNPJ"} preenchidos.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao consultar o CNPJ.");
+    } finally {
+      setBuscandoCnpj(false);
+    }
+  }
+
+  const cnpjValido = isValidCNPJ(form.emissor_cnpj);
+  // Produtor OK: vinculado a um cadastrado, ou novo com razão + CNPJ válido.
+  const produtorOk =
+    Boolean(emissorSelId) ||
+    (form.emissor_razao.trim().length > 0 && cnpjValido);
 
   const conf = Math.round((form.ocr_confianca ?? 0) * 100);
 
@@ -199,9 +297,19 @@ export function NFReviewForm({
   const rsTonKm = frete > 0 && qtd > 0 && dist > 0 ? frete / (qtd * dist) : 0;
 
   async function handleSave() {
+    if (!produtorOk) {
+      toast.error(
+        "Produtor não cadastrado: selecione um produtor existente ou informe CNPJ válido + razão social."
+      );
+      return;
+    }
     setSaving(true);
     try {
-      const r = await saveNFFromForm(form, { nfId, emissorId, clienteId });
+      const r = await saveNFFromForm(form, {
+        nfId,
+        emissorId: emissorSelId ?? emissorId,
+        clienteId,
+      });
       if (r.status === "invalid") {
         toast.error(r.message ?? "Dados incompletos.");
         return;
@@ -279,20 +387,93 @@ export function NFReviewForm({
           </div>
         </Section>
 
-        <Section title="Emissor (concorrente / fornecedor)">
+        <Section title="Emissor (produtor / fornecedor)" defaultOpen>
+          <div className="sm:col-span-2">
+            {emissorSel ? (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+                <span className="flex min-w-0 items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      Vinculado a {emissorSel.razao_social}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      produtor já cadastrado
+                    </span>
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEmissorSelId(null)}
+                >
+                  <Unlink className="h-4 w-4" /> Desvincular
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                <span className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Produtor novo / não vinculado
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <Building2 className="h-4 w-4" /> Selecionar cadastrado
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="sm:col-span-2">
             <Field
               label="Razão social"
               value={form.emissor_razao}
-              onChange={(v) => set("emissor_razao", v)}
+              onChange={(v) => setEmissorField("emissor_razao", v)}
+              required
             />
           </div>
-          <FieldShell label="CNPJ">
-            <CnpjInput
-              value={form.emissor_cnpj}
-              onChange={(v) => set("emissor_cnpj", v)}
-            />
+
+          <FieldShell label="CNPJ" required>
+            <div className="flex gap-2">
+              <CnpjInput
+                value={form.emissor_cnpj}
+                onChange={(v) => setEmissorField("emissor_cnpj", v)}
+                className={cn(
+                  !emissorSelId &&
+                    form.emissor_cnpj &&
+                    !cnpjValido &&
+                    "border-destructive focus-visible:ring-destructive"
+                )}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={buscarReceitaEmissor}
+                disabled={buscandoCnpj}
+                title="Buscar dados na Receita (BrasilAPI)"
+              >
+                {buscandoCnpj ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            {!emissorSelId && form.emissor_cnpj && !cnpjValido && (
+              <p className="text-xs text-destructive">CNPJ inválido.</p>
+            )}
+            {!emissorSelId && !form.emissor_cnpj && (
+              <p className="text-xs text-amber-600">
+                CNPJ não identificado — informe para cadastrar o produtor.
+              </p>
+            )}
           </FieldShell>
+
           <Field
             label="Município"
             value={form.emissor_municipio}
@@ -304,6 +485,12 @@ export function NFReviewForm({
             onChange={(v) => set("emissor_uf", v)}
           />
         </Section>
+
+        <EmissorPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={vincularEmissor}
+        />
 
         <Section title="Destinatário (cliente)">
           <div className="sm:col-span-2">

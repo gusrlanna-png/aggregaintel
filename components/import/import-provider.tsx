@@ -6,6 +6,9 @@ import { toast } from "sonner";
 
 import { emptyForm, ocrToForm, type NFFormValues } from "@/lib/utils/ocr-map";
 import { parseNFText } from "@/lib/utils/nf-text-parse";
+import { getEmissores } from "@/lib/supabase/emissores";
+import { findDuplicateNF } from "@/lib/supabase/nf";
+import type { Emissor } from "@/lib/supabase/types";
 
 export interface QueueItem {
   file: File;
@@ -83,6 +86,28 @@ async function callExtract(file: File) {
   return { json, status: res.status };
 }
 
+/** Casa o emissor da NF (por CNPJ ou razão social) com um produtor já cadastrado. */
+function matchEmissorId(
+  form: NFFormValues,
+  emissores: Emissor[]
+): string | null {
+  const cnpj = (form.emissor_cnpj || "").replace(/\D/g, "");
+  if (cnpj.length >= 11) {
+    const e = emissores.find(
+      (x) => (x.cnpj || "").replace(/\D/g, "") === cnpj
+    );
+    if (e) return e.id;
+  }
+  const nome = (form.emissor_razao || "").trim().toLowerCase();
+  if (nome) {
+    const e = emissores.find(
+      (x) => x.razao_social.trim().toLowerCase() === nome
+    );
+    if (e) return e.id;
+  }
+  return null;
+}
+
 export function ImportProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [files, setFiles] = React.useState<File[]>([]);
@@ -155,6 +180,9 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     let okIA = 0;
     let okLocal = 0;
     let manual = 0;
+    let jaMigradas = 0;
+    // Produtores cadastrados — para casar o emissor e detectar NFs já migradas.
+    const emissoresCad = await getEmissores().catch(() => [] as Emissor[]);
 
     const workerRef: { current: import("tesseract.js").Worker | null } = {
       current: null,
@@ -216,6 +244,28 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
       } catch {
         manual++;
       }
+      // Descarta NFs já migradas (mesma chave OU mesmo nº/série/produtor).
+      const numeroNF = Number(form.numero_nf);
+      const chaveNF = (form.chave_acesso || "").replace(/\D/g, "");
+      const emissorMatch = matchEmissorId(form, emissoresCad);
+      if (numeroNF > 0 && (chaveNF || emissorMatch)) {
+        try {
+          const dup = await findDuplicateNF({
+            numero_nf: numeroNF,
+            serie: form.serie || null,
+            emissor_id: emissorMatch,
+            chave_acesso: chaveNF || null,
+          });
+          if (dup) {
+            jaMigradas++;
+            setProgress({ done: i + 1, total: files.length });
+            continue;
+          }
+        } catch {
+          /* se a checagem falhar, segue para revisão manual */
+        }
+      }
+
       result.push({ file, previewUrl: previews[i], isPdf, form, provider });
       setProgress({ done: i + 1, total: files.length });
       if (usouIA && i < files.length - 1) await sleep(2500);
@@ -224,23 +274,32 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     setEspera(null);
     if (workerRef.current) await workerRef.current.terminate();
 
-    setItems(result);
+    setItems(result.length ? result : null);
     setCurrent(0);
     setLoading(false);
 
-    if (okIA + okLocal === 0) {
-      toast.warning(
-        "Não foi possível ler automaticamente. Preencha os dados manualmente."
-      );
-    } else {
-      const partes: string[] = [];
-      if (okIA) partes.push(`${okIA} por IA`);
-      if (okLocal) partes.push(`${okLocal} por OCR local`);
-      if (manual) partes.push(`${manual} p/ preencher`);
-      toast.success(
-        `Leitura concluída (${partes.join(" · ")}). Revise antes de salvar.`
-      );
+    if (result.length === 0) {
+      reset();
+      if (jaMigradas > 0) {
+        toast.info(
+          `${jaMigradas} NF(s) já estavam migradas — descartadas. Nada novo para revisar.`
+        );
+      } else {
+        toast.warning(
+          "Não foi possível ler automaticamente. Tente outra foto ou cadastre manual."
+        );
+      }
+      return;
     }
+
+    const partes: string[] = [];
+    if (okIA) partes.push(`${okIA} por IA`);
+    if (okLocal) partes.push(`${okLocal} por OCR local`);
+    if (manual) partes.push(`${manual} p/ preencher`);
+    if (jaMigradas) partes.push(`${jaMigradas} já migrada(s) descartada(s)`);
+    toast.success(
+      `Leitura concluída (${partes.join(" · ")}). Revise antes de salvar.`
+    );
   }
 
   function avancar() {

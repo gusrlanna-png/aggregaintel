@@ -1,6 +1,7 @@
 import { DuplicateNFError, saveNF, updateNF } from "@/lib/supabase/nf";
 import { findOrCreateEmissor } from "@/lib/supabase/emissores";
 import { findOrCreateCliente } from "@/lib/supabase/clientes";
+import { isValidCNPJ } from "./masks";
 import type { NFFormValues } from "./ocr-map";
 
 export type SaveNFStatus =
@@ -39,6 +40,18 @@ export async function saveNFFromForm(
 ): Promise<SaveNFResult> {
   const err = validarNF(form);
   if (err) return { status: "invalid", message: err };
+
+  // Produtor obrigatório ao CRIAR uma NF: precisa de um emissor vinculado OU
+  // razão social + CNPJ válido (para cadastrar o produtor automaticamente).
+  if (!opts.nfId && !opts.emissorId) {
+    if (!form.emissor_razao?.trim() || !isValidCNPJ(form.emissor_cnpj)) {
+      return {
+        status: "invalid",
+        message:
+          "Produtor não cadastrado: selecione um produtor ou informe CNPJ válido + razão social.",
+      };
+    }
+  }
 
   try {
     let emissor_id = opts.emissorId ?? undefined;

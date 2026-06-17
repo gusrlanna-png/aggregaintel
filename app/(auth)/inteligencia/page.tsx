@@ -25,6 +25,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { IntelFeed } from "@/components/inteligencia/intel-feed";
+import { NFImport } from "@/components/nf/nf-import";
 import { getEmissores } from "@/lib/supabase/emissores";
 import { getClientes } from "@/lib/supabase/clientes";
 import { getIntel, saveIntel } from "@/lib/supabase/intel";
@@ -229,13 +230,15 @@ export default function InteligenciaPage() {
           Inteligência de mercado
         </h1>
         <p className="text-sm text-muted-foreground">
-          WhatsApp, entradas manuais e sinais de concorrência
+          Central de entradas: NF, WhatsApp/documentos, manual e sinais de
+          concorrência
         </p>
       </div>
 
       <Tabs defaultValue="adicionar">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="adicionar">Adicionar</TabsTrigger>
+          <TabsTrigger value="nf">NF</TabsTrigger>
           <TabsTrigger value="feed">Feed</TabsTrigger>
         </TabsList>
 
@@ -417,6 +420,10 @@ export default function InteligenciaPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="nf" className="space-y-4">
+          <NFImport mostrarTitulo={false} />
         </TabsContent>
 
         <TabsContent value="feed" className="space-y-3">

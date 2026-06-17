@@ -9,6 +9,7 @@ import { parseNFText } from "@/lib/utils/nf-text-parse";
 import { getEmissores } from "@/lib/supabase/emissores";
 import { findDuplicateNF } from "@/lib/supabase/nf";
 import type { Emissor } from "@/lib/supabase/types";
+import { isValidCNPJ, onlyDigits } from "@/lib/utils/masks";
 
 export interface QueueItem {
   file: File;
@@ -181,6 +182,8 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     let okLocal = 0;
     let manual = 0;
     let jaMigradas = 0;
+    let cnpjVerificados = 0;
+    let cnpjRemovidos = 0;
     // Produtores cadastrados — para casar o emissor e detectar NFs já migradas.
     const emissoresCad = await getEmissores().catch(() => [] as Emissor[]);
 
@@ -244,6 +247,38 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
       } catch {
         manual++;
       }
+
+      // Valida o CNPJ do emissor na Receita (só para produtor novo, não casado):
+      // completa a razão oficial e REMOVE CNPJ inexistente (não cria produtor
+      // errado no "Salvar todas"). 404 = remove; 502/500 = mantém (transitório).
+      if (!matchEmissorId(form, emissoresCad)) {
+        const d = onlyDigits(form.emissor_cnpj);
+        if (d.length === 14 && isValidCNPJ(d)) {
+          try {
+            const r = await fetch(`/api/cnpj/${d}`);
+            if (r.ok) {
+              const c = await r.json();
+              form = {
+                ...form,
+                emissor_razao: c.razao_social || form.emissor_razao,
+                emissor_municipio: c.municipio || form.emissor_municipio,
+                emissor_uf: c.uf || form.emissor_uf,
+              };
+              cnpjVerificados++;
+            } else if (r.status === 404) {
+              form = { ...form, emissor_cnpj: "" };
+              cnpjRemovidos++;
+            }
+          } catch {
+            /* rede: mantém o que foi lido */
+          }
+        } else if (d.length > 0) {
+          // dígito verificador inválido → remove (será preenchido na revisão)
+          form = { ...form, emissor_cnpj: "" };
+          cnpjRemovidos++;
+        }
+      }
+
       // Descarta NFs já migradas (mesma chave OU mesmo nº/série/produtor).
       const numeroNF = Number(form.numero_nf);
       const chaveNF = (form.chave_acesso || "").replace(/\D/g, "");
@@ -297,6 +332,9 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     if (okLocal) partes.push(`${okLocal} por OCR local`);
     if (manual) partes.push(`${manual} p/ preencher`);
     if (jaMigradas) partes.push(`${jaMigradas} já migrada(s) descartada(s)`);
+    if (cnpjRemovidos)
+      partes.push(`${cnpjRemovidos} CNPJ inválido(s) removido(s)`);
+    void cnpjVerificados;
     toast.success(
       `Leitura concluída (${partes.join(" · ")}). Revise antes de salvar.`
     );

@@ -38,7 +38,6 @@ import { EmissorPicker } from "@/components/nf/emissor-picker";
 import { cn } from "@/lib/utils";
 import { saveNFFromForm } from "@/lib/utils/save-nf-from-form";
 import { getEmissores } from "@/lib/supabase/emissores";
-import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
 import { isValidCNPJ, onlyDigits } from "@/lib/utils/masks";
 import type { Emissor } from "@/lib/supabase/types";
 import {
@@ -194,6 +193,12 @@ export function NFReviewForm({
   );
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
+  // Verificação do CNPJ na Receita (existência + razão oficial).
+  const [cnpjVerif, setCnpjVerif] = React.useState<{
+    status: "idle" | "verificando" | "ok" | "nao_encontrado" | "erro";
+    razao?: string;
+  }>({ status: "idle" });
+  const autoVerifRan = React.useRef(false);
 
   const { data: emissoresList = [] } = useQuery({
     queryKey: ["emissores-all"],
@@ -215,6 +220,7 @@ export function NFReviewForm({
     v: NFFormValues[K]
   ) => {
     setEmissorSelId(null);
+    if (key === "emissor_cnpj") setCnpjVerif({ status: "idle" });
     set(key, v);
   };
 
@@ -234,7 +240,16 @@ export function NFReviewForm({
       const m = emissoresList.find(
         (e) => e.razao_social.trim().toLowerCase() === nome
       );
-      if (m) setEmissorSelId(m.id);
+      if (m) {
+        setEmissorSelId(m.id);
+        return;
+      }
+    }
+    // Não há produtor cadastrado e o CNPJ está completo → valida na Receita
+    // (existência + razão oficial) para completar/garantir o cadastro.
+    if (cnpj.length === 14 && !autoVerifRan.current) {
+      autoVerifRan.current = true;
+      void verificarCnpjReceita();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emissoresList]);
@@ -252,34 +267,71 @@ export function NFReviewForm({
     }));
   }
 
-  async function buscarReceitaEmissor() {
+  // Verifica o CNPJ na Receita (BrasilAPI): confirma a EXISTÊNCIA e traz a razão
+  // social oficial (autocompleta). Distingue "não encontrado" (404) de erro de rede.
+  async function verificarCnpjReceita(): Promise<
+    "ok" | "nao_encontrado" | "erro" | "invalido"
+  > {
     const d = onlyDigits(form.emissor_cnpj);
-    if (d.length !== 14) {
+    if (d.length !== 14 || !isValidCNPJ(d)) {
+      setCnpjVerif({ status: "idle" });
+      return "invalido";
+    }
+    setCnpjVerif({ status: "verificando" });
+    try {
+      const res = await fetch(`/api/cnpj/${d}`);
+      if (res.status === 404) {
+        setCnpjVerif({ status: "nao_encontrado" });
+        return "nao_encontrado";
+      }
+      if (!res.ok) {
+        // Falha transitória (502/500) — não reprova o CNPJ.
+        setCnpjVerif({ status: "erro" });
+        return "erro";
+      }
+      const c = await res.json();
+      const razao = (c.razao_social as string | undefined) ?? undefined;
+      setCnpjVerif({ status: "ok", razao });
+      setForm((f) => ({
+        ...f,
+        emissor_razao: razao || f.emissor_razao,
+        emissor_municipio: c.municipio || f.emissor_municipio,
+        emissor_uf: c.uf || f.emissor_uf,
+      }));
+      return "ok";
+    } catch {
+      setCnpjVerif({ status: "erro" });
+      return "erro";
+    }
+  }
+
+  async function buscarReceitaEmissor() {
+    if (onlyDigits(form.emissor_cnpj).length !== 14) {
       toast.error("Informe um CNPJ com 14 dígitos.");
       return;
     }
     setBuscandoCnpj(true);
     try {
-      const c = await buscarCadastroCnpj(d);
-      setForm((f) => ({
-        ...f,
-        emissor_razao: c.razao_social || f.emissor_razao,
-        emissor_municipio: c.municipio || f.emissor_municipio,
-        emissor_uf: c.uf || f.emissor_uf,
-      }));
-      toast.success(`Dados de ${c.razao_social ?? "CNPJ"} preenchidos.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao consultar o CNPJ.");
+      const s = await verificarCnpjReceita();
+      if (s === "ok") toast.success("CNPJ verificado na Receita.");
+      else if (s === "nao_encontrado")
+        toast.error("CNPJ não encontrado na Receita.");
+      else if (s === "invalido")
+        toast.error("CNPJ inválido (dígito verificador).");
+      else toast.error("Falha ao consultar o CNPJ (rede). Tente de novo.");
     } finally {
       setBuscandoCnpj(false);
     }
   }
 
   const cnpjValido = isValidCNPJ(form.emissor_cnpj);
-  // Produtor OK: vinculado a um cadastrado, ou novo com razão + CNPJ válido.
+  // Produtor OK: vinculado a um cadastrado, OU novo com razão + CNPJ válido que
+  // NÃO foi reprovado na Receita (não encontrado bloqueia o cadastro).
   const produtorOk =
     Boolean(emissorSelId) ||
-    (form.emissor_razao.trim().length > 0 && cnpjValido);
+    (form.emissor_razao.trim().length > 0 &&
+      cnpjValido &&
+      cnpjVerif.status !== "nao_encontrado");
 
   const conf = Math.round((form.ocr_confianca ?? 0) * 100);
 
@@ -302,6 +354,23 @@ export function NFReviewForm({
         "Produtor não cadastrado: selecione um produtor existente ou informe CNPJ válido + razão social."
       );
       return;
+    }
+    // Ao CRIAR um produtor novo (sem vínculo), confirma o CNPJ na Receita.
+    if (!emissorSelId && !emissorId) {
+      if (!cnpjValido) {
+        toast.error("CNPJ inválido — confira o número.");
+        return;
+      }
+      let st: string = cnpjVerif.status;
+      if (st !== "ok" && st !== "nao_encontrado") {
+        st = await verificarCnpjReceita();
+      }
+      if (st === "nao_encontrado" || st === "invalido") {
+        toast.error(
+          "CNPJ não encontrado na Receita — não é possível cadastrar este produtor. Confira o número lido na nota."
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -443,10 +512,17 @@ export function NFReviewForm({
               <CnpjInput
                 value={form.emissor_cnpj}
                 onChange={(v) => setEmissorField("emissor_cnpj", v)}
+                onBlur={() => {
+                  if (
+                    !emissorSelId &&
+                    onlyDigits(form.emissor_cnpj).length === 14
+                  )
+                    void verificarCnpjReceita();
+                }}
                 className={cn(
                   !emissorSelId &&
                     form.emissor_cnpj &&
-                    !cnpjValido &&
+                    (!cnpjValido || cnpjVerif.status === "nao_encontrado") &&
                     "border-destructive focus-visible:ring-destructive"
                 )}
               />
@@ -455,9 +531,9 @@ export function NFReviewForm({
                 variant="secondary"
                 onClick={buscarReceitaEmissor}
                 disabled={buscandoCnpj}
-                title="Buscar dados na Receita (BrasilAPI)"
+                title="Verificar e completar dados na Receita (BrasilAPI)"
               >
-                {buscandoCnpj ? (
+                {buscandoCnpj || cnpjVerif.status === "verificando" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Search className="h-4 w-4" />
@@ -465,7 +541,25 @@ export function NFReviewForm({
               </Button>
             </div>
             {!emissorSelId && form.emissor_cnpj && !cnpjValido && (
-              <p className="text-xs text-destructive">CNPJ inválido.</p>
+              <p className="text-xs text-destructive">
+                CNPJ inválido (dígito verificador).
+              </p>
+            )}
+            {!emissorSelId && cnpjValido && cnpjVerif.status === "verificando" && (
+              <p className="text-xs text-muted-foreground">
+                Verificando na Receita…
+              </p>
+            )}
+            {!emissorSelId && cnpjVerif.status === "ok" && (
+              <p className="text-xs text-emerald-600">
+                ✓ Verificado: {cnpjVerif.razao ?? "CNPJ válido na Receita"}
+              </p>
+            )}
+            {!emissorSelId && cnpjVerif.status === "nao_encontrado" && (
+              <p className="text-xs text-destructive">
+                CNPJ não encontrado na Receita — confira o número (não será
+                cadastrado).
+              </p>
             )}
             {!emissorSelId && !form.emissor_cnpj && (
               <p className="text-xs text-amber-600">

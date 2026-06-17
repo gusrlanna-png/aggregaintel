@@ -79,7 +79,14 @@ export default function InteligenciaPage() {
     setWaLoading(true);
     setWaResult(null);
     try {
-      const conteudo = await waFile.text();
+      const { extrairTextoDocumento } = await import(
+        "@/lib/import/extrair-documento"
+      );
+      const { texto: conteudo, aviso } = await extrairTextoDocumento(waFile);
+      if (!conteudo.trim()) {
+        throw new Error(aviso ?? "Não foi possível ler o documento.");
+      }
+      if (aviso) toast.warning(aviso);
       const res = await fetch("/api/whatsapp/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,20 +250,24 @@ export default function InteligenciaPage() {
         </TabsList>
 
         <TabsContent value="adicionar" className="space-y-4">
-          {/* WhatsApp */}
+          {/* Documentos (WhatsApp .zip/.txt, PDF, Word, Markdown…) */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <MessageSquare className="h-4 w-4" /> Upload de conversa
-                (WhatsApp .txt)
+                <MessageSquare className="h-4 w-4" /> Importar documento (IA)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Input
                 type="file"
-                accept=".txt,text/plain"
+                accept=".txt,.md,.csv,.json,.vcf,.zip,.pdf,.docx,text/plain,application/zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 onChange={(e) => setWaFile(e.target.files?.[0] ?? null)}
               />
+              <p className="text-xs text-muted-foreground">
+                Aceita conversa do WhatsApp (.txt ou .zip com mídia/contatos),
+                PDF, Word (.docx), Markdown, CSV. A IA agrupa as mensagens e
+                extrai preços, concorrentes, clientes e sinais de mercado.
+              </p>
               <Button
                 onClick={enviarWhatsapp}
                 disabled={!waFile || waLoading}
@@ -267,7 +278,7 @@ export default function InteligenciaPage() {
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                Processar arquivo
+                Processar documento
               </Button>
               {waResult && (
                 <p className="rounded-md bg-muted p-2 text-sm">{waResult}</p>

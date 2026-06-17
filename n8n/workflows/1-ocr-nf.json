@@ -1,0 +1,57 @@
+{
+  "name": "AggregaIntel — OCR de NF (webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nf-extract",
+        "responseMode": "lastNode",
+        "options": { "binaryData": true }
+      },
+      "id": "webhook",
+      "name": "Webhook (nf-extract)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-6",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Extraia os dados da NF-e em JSON (mesmo schema do app). Retorne apenas JSON."
+            }
+          ]
+        },
+        "options": { "maxTokens": 2048 }
+      },
+      "id": "claude",
+      "name": "Claude Vision — OCR",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [520, 300],
+      "credentials": { "anthropicApi": { "id": "REPLACE", "name": "Anthropic API" } }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "notas_fiscais",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "supabase",
+      "name": "Supabase — Inserir NF",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "credentials": { "supabaseApi": { "id": "REPLACE", "name": "Supabase Service Role" } }
+    }
+  ],
+  "connections": {
+    "Webhook (nf-extract)": { "main": [[{ "node": "Claude Vision — OCR", "type": "main", "index": 0 }]] },
+    "Claude Vision — OCR": { "main": [[{ "node": "Supabase — Inserir NF", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

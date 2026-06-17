@@ -1,0 +1,12 @@
+-- seed.sql — AggregaIntel
+--
+-- O sistema NÃO usa mais dados fictícios. Produtores e clientes devem vir de:
+--   • extração de Notas Fiscais (foto/PDF → OCR);
+--   • importação de arquivos;
+--   • cadastro individual no app (com busca por CNPJ).
+--
+-- Este arquivo é intencionalmente vazio. Marque a sua empresa (MBV) pelo
+-- toggle "Nossa empresa (MBV)" no cadastro do produtor após criá-la.
+--
+-- Exemplo (opcional) de como marcar a MBV caso já tenha cadastrado por CNPJ:
+--   UPDATE emissores SET eh_mbv = TRUE WHERE cnpj = '03.334.595/0001-00';

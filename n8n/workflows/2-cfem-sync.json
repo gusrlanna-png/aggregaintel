@@ -1,0 +1,57 @@
+{
+  "name": "AggregaIntel — Sync ANM/CFEM",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 6 1 * *" }] } },
+      "id": "cron",
+      "name": "Cron (mensal — dia 1, 06h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cfem-sync",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook (cfem-sync — manual)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 480]
+    },
+    {
+      "parameters": {
+        "url": "https://app.powerbi.com/REPLACE_COM_ENDPOINT_ANM",
+        "options": {}
+      },
+      "id": "http",
+      "name": "HTTP — ANM Power BI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 380]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "cfem_anm",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "supabase",
+      "name": "Supabase — Inserir CFEM",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 380],
+      "credentials": { "supabaseApi": { "id": "REPLACE", "name": "Supabase Service Role" } }
+    }
+  ],
+  "connections": {
+    "Cron (mensal — dia 1, 06h)": { "main": [[{ "node": "HTTP — ANM Power BI", "type": "main", "index": 0 }]] },
+    "Webhook (cfem-sync — manual)": { "main": [[{ "node": "HTTP — ANM Power BI", "type": "main", "index": 0 }]] },
+    "HTTP — ANM Power BI": { "main": [[{ "node": "Supabase — Inserir CFEM", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

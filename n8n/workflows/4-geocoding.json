@@ -1,0 +1,50 @@
+{
+  "name": "AggregaIntel — Geocoding automático",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "geocode",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook (geocode)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://maps.googleapis.com/maps/api/geocode/json?address={{ encodeURIComponent($json.body.address) }}&region=br&key=REPLACE_GOOGLE_KEY",
+        "options": {}
+      },
+      "id": "http",
+      "name": "HTTP — Google Geocoding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "emissores",
+        "filterType": "manual",
+        "matchingColumns": "id",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "supabase",
+      "name": "Supabase — Atualizar lat/lng",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "credentials": { "supabaseApi": { "id": "REPLACE", "name": "Supabase Service Role" } }
+    }
+  ],
+  "connections": {
+    "Webhook (geocode)": { "main": [[{ "node": "HTTP — Google Geocoding", "type": "main", "index": 0 }]] },
+    "HTTP — Google Geocoding": { "main": [[{ "node": "Supabase — Atualizar lat/lng", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

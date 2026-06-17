@@ -1,0 +1,57 @@
+{
+  "name": "AggregaIntel — WhatsApp Parser",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-parse",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook (whatsapp-parse)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-6",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Classifique cada mensagem da conversa de WhatsApp abaixo em: preco | volume | concorrente | cliente | alerta | outro. Extraia valores numéricos e unidades quando houver. Retorne APENAS um array JSON [{classificacao, confianca, texto_extraido, valor_num, unidade, tags}].\n\nCONVERSA:\n{{ $json.body.conteudo }}"
+            }
+          ]
+        },
+        "options": { "maxTokens": 4096 }
+      },
+      "id": "claude",
+      "name": "Claude — Classificar",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [520, 300],
+      "credentials": { "anthropicApi": { "id": "REPLACE", "name": "Anthropic API" } }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "inteligencia_mercado",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "supabase",
+      "name": "Supabase — Inserir intel",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "credentials": { "supabaseApi": { "id": "REPLACE", "name": "Supabase Service Role" } }
+    }
+  ],
+  "connections": {
+    "Webhook (whatsapp-parse)": { "main": [[{ "node": "Claude — Classificar", "type": "main", "index": 0 }]] },
+    "Claude — Classificar": { "main": [[{ "node": "Supabase — Inserir intel", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

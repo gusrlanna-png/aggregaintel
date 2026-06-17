@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 165 30% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 165 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 165 30% 12%;
+    --primary: 165 76% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 165 20% 95%;
+    --secondary-foreground: 165 40% 18%;
+    --muted: 165 16% 95%;
+    --muted-foreground: 165 8% 42%;
+    --accent: 165 30% 92%;
+    --accent-foreground: 165 40% 18%;
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 165 14% 88%;
+    --input: 165 14% 88%;
+    --ring: 165 76% 25%;
+    --radius: 0.625rem;
+
+    --chart-1: 165 76% 25%;
+    --chart-2: 210 64% 48%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 268 50% 52%;
+    --chart-5: 0 0% 55%;
+  }
+
+  .dark {
+    --background: 165 25% 8%;
+    --foreground: 165 10% 92%;
+    --card: 165 22% 11%;
+    --card-foreground: 165 10% 92%;
+    --popover: 165 22% 11%;
+    --popover-foreground: 165 10% 92%;
+    --primary: 165 60% 45%;
+    --primary-foreground: 165 30% 8%;
+    --secondary: 165 18% 18%;
+    --secondary-foreground: 165 10% 92%;
+    --muted: 165 16% 18%;
+    --muted-foreground: 165 10% 62%;
+    --accent: 165 18% 20%;
+    --accent-foreground: 165 10% 92%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 165 14% 22%;
+    --input: 165 14% 22%;
+    --ring: 165 60% 45%;
+
+    --chart-1: 165 60% 45%;
+    --chart-2: 210 64% 60%;
+    --chart-3: 38 92% 58%;
+    --chart-4: 268 55% 65%;
+    --chart-5: 0 0% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  /* Safe area helpers for Android notch / gesture bar */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .h-safe-bottom {
+    height: env(safe-area-inset-bottom);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  CnpjInput,
+  CpfCnpjInput,
+  MoneyInput,
+  NumberInput,
+} from "@/components/ui/masked-input";
+import { ZoomableImage } from "@/components/ui/zoomable-image";
+import { cn } from "@/lib/utils";
 import { saveNFFromForm } from "@/lib/utils/save-nf-from-form";
 import {
   PRODUTO_TIPOS,
@@ -81,6 +89,62 @@ function Field({
         inputMode={type === "number" ? "decimal" : undefined}
       />
     </div>
+  );
+}
+
+/** Rótulo + qualquer input (usado pelos campos com máscara). */
+function FieldShell({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <Label className="text-xs">
+        {label}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+/** Campo de dinheiro (R$ x.xxx,xx). */
+function MoneyField(props: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <FieldShell label={props.label} required={props.required}>
+      <MoneyInput value={props.value} onChange={props.onChange} />
+    </FieldShell>
+  );
+}
+
+/** Campo numérico pt-BR (x.xxx,xx). */
+function NumberField(props: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  decimals?: number;
+}) {
+  return (
+    <FieldShell label={props.label} required={props.required}>
+      <NumberInput
+        value={props.value}
+        onChange={props.onChange}
+        decimals={props.decimals}
+      />
+    </FieldShell>
   );
 }
 
@@ -223,11 +287,12 @@ export function NFReviewForm({
               onChange={(v) => set("emissor_razao", v)}
             />
           </div>
-          <Field
-            label="CNPJ"
-            value={form.emissor_cnpj}
-            onChange={(v) => set("emissor_cnpj", v)}
-          />
+          <FieldShell label="CNPJ">
+            <CnpjInput
+              value={form.emissor_cnpj}
+              onChange={(v) => set("emissor_cnpj", v)}
+            />
+          </FieldShell>
           <Field
             label="Município"
             value={form.emissor_municipio}
@@ -248,11 +313,12 @@ export function NFReviewForm({
               onChange={(v) => set("cliente_nome", v)}
             />
           </div>
-          <Field
-            label="CNPJ / CPF"
-            value={form.cliente_doc}
-            onChange={(v) => set("cliente_doc", v)}
-          />
+          <FieldShell label="CNPJ / CPF">
+            <CpfCnpjInput
+              value={form.cliente_doc}
+              onChange={(v) => set("cliente_doc", v)}
+            />
+          </FieldShell>
           <Field
             label="Município"
             value={form.cliente_municipio}
@@ -293,24 +359,21 @@ export function NFReviewForm({
             value={form.produto_ncm}
             onChange={(v) => set("produto_ncm", v)}
           />
-          <Field
+          <NumberField
             label="Quantidade (t)"
             value={form.quantidade_ton}
             onChange={(v) => set("quantidade_ton", v)}
-            type="number"
             required
           />
-          <Field
+          <MoneyField
             label="Valor unitário (R$)"
             value={form.valor_unitario}
             onChange={(v) => set("valor_unitario", v)}
-            type="number"
           />
-          <Field
+          <MoneyField
             label="Valor total (R$)"
             value={form.valor_total}
             onChange={(v) => set("valor_total", v)}
-            type="number"
           />
           {precoCalc > 0 && (
             <div
@@ -329,11 +392,10 @@ export function NFReviewForm({
         </Section>
 
         <Section title="Impostos">
-          <Field
+          <MoneyField
             label="ICMS valor (R$)"
             value={form.icms_valor}
             onChange={(v) => set("icms_valor", v)}
-            type="number"
           />
           <Field
             label="ICMS fundamento"
@@ -349,17 +411,16 @@ export function NFReviewForm({
             onChange={(v) => set("frete_por_conta", v)}
             placeholder="emitente / destinatario"
           />
-          <Field
+          <MoneyField
             label="Valor do frete (R$)"
             value={form.frete_valor}
             onChange={(v) => set("frete_valor", v)}
-            type="number"
           />
-          <Field
+          <NumberField
             label="Distância (km)"
             value={form.distancia_km}
             onChange={(v) => set("distancia_km", v)}
-            type="number"
+            decimals={0}
           />
           {rsTonKm > 0 && (
             <div className="space-y-1.5">
@@ -384,17 +445,15 @@ export function NFReviewForm({
             value={form.uf_veiculo}
             onChange={(v) => set("uf_veiculo", v)}
           />
-          <Field
+          <NumberField
             label="Peso bruto (t)"
             value={form.peso_bruto}
             onChange={(v) => set("peso_bruto", v)}
-            type="number"
           />
-          <Field
+          <NumberField
             label="Peso líquido (t)"
             value={form.peso_liquido}
             onChange={(v) => set("peso_liquido", v)}
-            type="number"
           />
           <Field
             label="Espécie da carga"
@@ -425,13 +484,11 @@ export function NFReviewForm({
 
       {imageUrl && (
         <div className="order-first lg:order-last">
-          <div className="sticky top-20 overflow-hidden rounded-lg border bg-muted">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt="NF capturada"
-              className="h-auto w-full object-contain"
-            />
+          <div className="sticky top-20">
+            <ZoomableImage src={imageUrl} alt="NF capturada" />
+            <p className="mt-1.5 text-center text-xs text-muted-foreground">
+              Toque na imagem para ampliar e conferir os dados.
+            </p>
           </div>
         </div>
       )}

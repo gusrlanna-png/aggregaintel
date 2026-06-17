@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/masked-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -261,10 +262,10 @@ export function EmissorForm({ emissor }: { emissor?: Emissor | null }) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Capacidade (t/mês)</Label>
-            <Input
-              type="number"
+            <NumberInput
               value={f.capacidade_ton_mes}
-              onChange={(e) => set("capacidade_ton_mes", e.target.value)}
+              onChange={(v) => set("capacidade_ton_mes", v)}
+              decimals={0}
             />
           </div>
           <div className="space-y-1.5">

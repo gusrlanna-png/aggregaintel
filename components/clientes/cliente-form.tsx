@@ -26,6 +26,7 @@ import {
 import { SEGMENTOS, type Segmento } from "@/lib/utils/agregados";
 import type { Cliente, ClienteContato } from "@/lib/supabase/types";
 import { mascararCnpj } from "@/lib/utils/cnpj";
+import { maskCPF, onlyDigits } from "@/lib/utils/masks";
 
 type FormState = {
   razao_social: string;
@@ -223,7 +224,13 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">CPF</Label>
-            <Input value={f.cpf} onChange={(e) => set("cpf", e.target.value)} />
+            <Input
+              value={maskCPF(f.cpf)}
+              onChange={(e) => set("cpf", onlyDigits(e.target.value).slice(0, 11))}
+              inputMode="numeric"
+              maxLength={14}
+              placeholder="000.000.000-00"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Telefone (empresa)</Label>

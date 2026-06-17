@@ -8,6 +8,7 @@ import {
   Building2,
   FileText,
   LayoutDashboard,
+  MapPin,
   Settings,
   User,
   Users,
@@ -19,6 +20,7 @@ import { podeAcessar } from "@/lib/auth/rotas";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Início" },
+  { href: "/visitas", icon: MapPin, label: "Visitas" },
   { href: "/nf", icon: FileText, label: "NFs" },
   { href: "/concorrentes", icon: Building2, label: "Mercado" },
   { href: "/clientes", icon: Users, label: "Clientes" },

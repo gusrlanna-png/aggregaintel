@@ -38,7 +38,7 @@ export default function VisitaDetailPage() {
     );
   }
 
-  const { visita: v, concorrentes } = data;
+  const { visita: v, concorrentes, pessoas, brindes } = data;
   const nome = v.cliente?.razao_social || v.cliente_nome_livre || "Cliente";
   const mapa =
     v.lat != null && v.lng != null
@@ -59,9 +59,10 @@ export default function VisitaDetailPage() {
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 p-4 text-sm">
-          <Campo label="Data/hora" valor={(v.checkin_at ?? "").slice(0, 16).replace("T", " ")} />
+          <Campo label="Chegada" valor={(v.checkin_at ?? "").slice(0, 16).replace("T", " ")} />
+          <Campo label="Saída" valor={v.checkout_at ? v.checkout_at.slice(0, 16).replace("T", " ") : "—"} />
           <Campo label="Motivo" valor={v.motivo?.nome ?? "—"} />
-          <Campo label="Pessoa" valor={v.pessoa_nome ?? "—"} />
+          <Campo label="Categoria" valor={v.categoria?.nome ?? "—"} />
           <Campo label="Segmento" valor={v.segmento ?? "—"} />
           <Campo
             label="Distância do check-in"
@@ -117,6 +118,44 @@ export default function VisitaDetailPage() {
                     .filter(Boolean)
                     .join("  ·  ")}
                 </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {pessoas.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Pessoas ({pessoas.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y p-0">
+            {pessoas.map((p) => (
+              <div key={p.id} className="p-3 text-sm">
+                {p.pessoa_nome ?? "—"}
+                {p.cargo ? (
+                  <span className="text-xs text-muted-foreground"> · {p.cargo}</span>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {brindes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Brindes entregues</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y p-0">
+            {brindes.map((b) => (
+              <div key={b.id} className="flex justify-between p-3 text-sm">
+                <span>{b.brinde?.nome ?? "—"}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {b.quantidade} un.
+                </span>
               </div>
             ))}
           </CardContent>

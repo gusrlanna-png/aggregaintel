@@ -8,13 +8,35 @@ export interface VisitaMotivo {
   ativo: boolean;
 }
 
+export interface VisitaCategoria {
+  id: string;
+  nome: string;
+  ordem: number;
+  exige_brinde: boolean;
+  ativo: boolean;
+}
+
 export interface VisitaConcorrenteInput {
   emissor_id?: string | null;
   concorrente_nome?: string | null;
   produto?: string | null;
+  volume?: number | null;
   preco?: number | null;
   frete_valor?: number | null; // R$/t
   distancia_km?: number | null;
+}
+
+export interface VisitaPessoaInput {
+  pessoa_id?: string | null;
+  pessoa_nome?: string | null;
+  cargo?: string | null;
+}
+
+export interface BrindeEntregaInput {
+  brinde_id: string;
+  quantidade: number;
+  cliente_id?: string | null;
+  pessoa_id?: string | null;
 }
 
 export interface NovaVisita {
@@ -24,10 +46,14 @@ export interface NovaVisita {
   pessoa_id?: string | null;
   pessoa_nome?: string | null;
   motivo_id?: string | null;
+  categoria_id?: string | null;
   segmento?: string | null;
   lat?: number | null;
   lng?: number | null;
   distancia_m?: number | null;
+  checkin_at?: string | null;
+  checkout_at?: string | null;
+  avulsa?: boolean;
   perda_venda?: boolean;
   observacoes?: string | null;
 }
@@ -70,6 +96,18 @@ export async function getMotivos(): Promise<VisitaMotivo[]> {
   return (data as VisitaMotivo[]) ?? [];
 }
 
+export async function getCategorias(): Promise<VisitaCategoria[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("visita_categorias")
+    .select("*")
+    .eq("ativo", true)
+    .order("ordem");
+  if (error) throw error;
+  return (data as VisitaCategoria[]) ?? [];
+}
+
 export async function getVisitas(): Promise<Visita[]> {
   if (!isSupabaseConfigured()) return [];
   const supabase = createClient();
@@ -89,32 +127,59 @@ export interface VisitaConcorrente extends VisitaConcorrenteInput {
   rs_ton_km: number | null;
 }
 
-export async function getVisitaById(
-  id: string
-): Promise<{ visita: Visita; concorrentes: VisitaConcorrente[] } | null> {
+export interface VisitaPessoaRow {
+  id: string;
+  pessoa_id: string | null;
+  pessoa_nome: string | null;
+  cargo: string | null;
+}
+export interface VisitaBrindeRow {
+  id: string;
+  quantidade: number;
+  brinde?: { nome: string } | null;
+}
+
+export async function getVisitaById(id: string): Promise<{
+  visita: Visita & { categoria?: { nome: string } | null };
+  concorrentes: VisitaConcorrente[];
+  pessoas: VisitaPessoaRow[];
+  brindes: VisitaBrindeRow[];
+} | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = createClient();
-  const [{ data: v }, { data: cs }] = await Promise.all([
-    supabase
-      .from("visitas")
-      .select(
-        "*, cliente:clientes!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome)"
-      )
-      .eq("id", id)
-      .maybeSingle(),
-    supabase.from("visita_concorrentes").select("*").eq("visita_id", id),
-  ]);
+  const [{ data: v }, { data: cs }, { data: ps }, { data: bs }] =
+    await Promise.all([
+      supabase
+        .from("visitas")
+        .select(
+          "*, cliente:clientes!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome), categoria:visita_categorias(nome)"
+        )
+        .eq("id", id)
+        .maybeSingle(),
+      supabase.from("visita_concorrentes").select("*").eq("visita_id", id),
+      supabase.from("visita_pessoas").select("*").eq("visita_id", id),
+      supabase
+        .from("brinde_movimentos")
+        .select("id, quantidade, brinde:brindes(nome)")
+        .eq("visita_id", id),
+    ]);
   if (!v) return null;
   return {
-    visita: v as Visita,
+    visita: v as Visita & { categoria?: { nome: string } | null },
     concorrentes: (cs as VisitaConcorrente[]) ?? [],
+    pessoas: (ps as VisitaPessoaRow[]) ?? [],
+    brindes: (bs as unknown as VisitaBrindeRow[]) ?? [],
   };
 }
 
-/** Cria a visita e os concorrentes citados (calcula R$/t/km). */
+/** Cria a visita com pessoas, detalhamento comercial (R$/t/km) e brindes entregues. */
 export async function criarVisita(
   v: NovaVisita,
-  concorrentes: VisitaConcorrenteInput[] = []
+  opts: {
+    pessoas?: VisitaPessoaInput[];
+    concorrentes?: VisitaConcorrenteInput[];
+    brindes?: BrindeEntregaInput[];
+  } = {}
 ): Promise<string> {
   if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
   const supabase = createClient();
@@ -126,15 +191,34 @@ export async function criarVisita(
   if (error) throw error;
   const visitaId = (data as { id: string }).id;
 
-  const linhas = concorrentes
+  const pessoas = (opts.pessoas ?? [])
+    .filter((p) => p.pessoa_id || (p.pessoa_nome && p.pessoa_nome.trim()))
+    .map((p) => ({
+      visita_id: visitaId,
+      pessoa_id: p.pessoa_id || null,
+      pessoa_nome: p.pessoa_nome || null,
+      cargo: p.cargo || null,
+    }));
+  if (pessoas.length) {
+    const { error: ep } = await supabase.from("visita_pessoas").insert(pessoas);
+    if (ep) throw ep;
+  }
+
+  const linhas = (opts.concorrentes ?? [])
     .filter(
-      (c) => c.emissor_id || c.concorrente_nome || c.produto || c.preco != null
+      (c) =>
+        c.emissor_id ||
+        c.concorrente_nome ||
+        c.produto ||
+        c.preco != null ||
+        c.volume != null
     )
     .map((c) => ({
       visita_id: visitaId,
       emissor_id: c.emissor_id || null,
       concorrente_nome: c.concorrente_nome || null,
       produto: c.produto || null,
+      volume: c.volume ?? null,
       preco: c.preco ?? null,
       frete_valor: c.frete_valor ?? null,
       distancia_km: c.distancia_km ?? null,
@@ -148,6 +232,23 @@ export async function criarVisita(
       .from("visita_concorrentes")
       .insert(linhas);
     if (e2) throw e2;
+  }
+
+  const movs = (opts.brindes ?? [])
+    .filter((b) => b.brinde_id && b.quantidade > 0)
+    .map((b) => ({
+      brinde_id: b.brinde_id,
+      tipo: "saida",
+      quantidade: b.quantidade,
+      visita_id: visitaId,
+      cliente_id: b.cliente_id ?? v.cliente_id ?? null,
+      pessoa_id: b.pessoa_id ?? null,
+    }));
+  if (movs.length) {
+    const { error: e3 } = await supabase
+      .from("brinde_movimentos")
+      .insert(movs);
+    if (e3) throw e3;
   }
   return visitaId;
 }

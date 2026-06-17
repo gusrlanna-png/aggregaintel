@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ChevronRight,
   Database,
+  Gift,
   Package,
   ShieldCheck,
   SlidersHorizontal,
@@ -63,6 +64,13 @@ const ITENS: ConfigItem[] = [
     titulo: "Carteiras de vendas",
     descricao:
       "Carteiras por segmento + região/porte → vendedor responsável. Categoriza os clientes e prepara metas/comissionamento.",
+  },
+  {
+    href: "/configuracoes/brindes",
+    icon: Gift,
+    titulo: "Brindes",
+    descricao:
+      "Catálogo e estoque de brindes. A baixa acontece na entrega durante a visita (categoria Entrega de brindes).",
   },
 ];
 

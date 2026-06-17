@@ -24,10 +24,12 @@ export function ZoomableImage({
   const [open, setOpen] = React.useState(false);
   const [scale, setScale] = React.useState(1);
   const [rot, setRot] = React.useState(0);
+  // Documento fotografado deitado (landscape) → exibimos em pé (90°) p/ leitura.
+  const [landscape, setLandscape] = React.useState(false);
 
   function reset() {
     setScale(1);
-    setRot(0);
+    setRot(landscape ? 90 : 0);
   }
 
   return (
@@ -35,7 +37,8 @@ export function ZoomableImage({
       <button
         type="button"
         onClick={() => {
-          reset();
+          setScale(1);
+          setRot(landscape ? 90 : 0);
           setOpen(true);
         }}
         className={cn(
@@ -48,6 +51,11 @@ export function ZoomableImage({
         <img
           src={src}
           alt={alt ?? ""}
+          onLoad={(e) =>
+            setLandscape(
+              e.currentTarget.naturalWidth > e.currentTarget.naturalHeight
+            )
+          }
           className={cn("h-auto w-full object-contain", thumbClassName)}
         />
         <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white opacity-90">

@@ -258,26 +258,50 @@ export function NFReviewForm({
 
   const emissorSel = emissoresList.find((e) => e.id === emissorSelId) ?? null;
 
+  // Completa UF/município pela Receita quando o cadastro não tem (pós-vínculo).
+  async function completarPelaReceita(cnpjMasc: string) {
+    const d = onlyDigits(cnpjMasc);
+    if (d.length !== 14) return;
+    try {
+      const res = await fetch(`/api/cnpj/${d}`);
+      if (!res.ok) return;
+      const c = await res.json();
+      setForm((f) => ({
+        ...f,
+        emissor_municipio: f.emissor_municipio || c.municipio || "",
+        emissor_uf: f.emissor_uf || c.uf || "",
+        emissor_razao: f.emissor_razao || c.razao_social || "",
+      }));
+      setCnpjVerif({ status: "ok", razao: c.razao_social });
+    } catch {
+      /* rede: ignora */
+    }
+  }
+
   function vincularEmissor(e: Emissor) {
     setEmissorSelId(e.id);
+    const cnpj = e.cnpj || form.emissor_cnpj || "";
     setForm((f) => ({
       ...f,
       emissor_razao: e.razao_social,
-      emissor_cnpj: e.cnpj || "",
+      emissor_cnpj: cnpj,
       emissor_municipio: e.municipio || f.emissor_municipio,
       emissor_uf: e.uf || f.emissor_uf,
     }));
+    if (!e.uf) void completarPelaReceita(cnpj);
   }
 
-  // Ao casar automaticamente, completa os campos vazios com os dados do cadastro
-  // (ex.: CNPJ que o OCR não leu, mas o produtor já tem cadastrado).
+  // Ao casar automaticamente, completa os campos do cadastro (CNPJ que o OCR não
+  // leu mas o produtor já tem; UF/município). Se faltar UF, busca na Receita.
   function preencherDeEmissor(e: Emissor) {
+    const cnpj = e.cnpj || form.emissor_cnpj || "";
     setForm((f) => ({
       ...f,
-      emissor_cnpj: f.emissor_cnpj || e.cnpj || "",
-      emissor_municipio: f.emissor_municipio || e.municipio || "",
-      emissor_uf: f.emissor_uf || e.uf || "",
+      emissor_cnpj: cnpj,
+      emissor_municipio: e.municipio || f.emissor_municipio || "",
+      emissor_uf: e.uf || f.emissor_uf || "",
     }));
+    if (!e.uf) void completarPelaReceita(cnpj);
   }
 
   // Verifica o CNPJ na Receita (BrasilAPI): confirma a EXISTÊNCIA e traz a razão

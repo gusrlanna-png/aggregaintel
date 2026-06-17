@@ -75,11 +75,34 @@ export function classificaProduto(desc?: string | null): ProdutoTipo | "" {
   return "outro";
 }
 
+/** Extrai a placa do veículo (formato antigo ABC-1234 ou Mercosul ABC1D23). */
+function extrairPlaca(texto: string): string {
+  const m = (texto || "")
+    .toUpperCase()
+    .match(/\b([A-Z]{3}[\s-]?\d{4}|[A-Z]{3}\d[A-Z]\d{2})\b/);
+  return m ? m[1].replace(/[\s-]/g, "") : "";
+}
+
+/** Tenta extrair o nome do motorista após marcadores comuns (Motorista/Mtor/Mtr). */
+function extrairMotorista(texto: string): string {
+  const m = (texto || "").match(
+    /\b(?:motorista|mtor|mtr|mot)\b[\s:.\-]+([A-Za-zÀ-ú][A-Za-zÀ-ú .]{2,40})/i
+  );
+  return m ? m[1].trim().replace(/\s{2,}/g, " ").replace(/[.\-]$/, "").trim() : "";
+}
+
 export function ocrToForm(ocr: OCRResult): NFFormValues {
   // A chave de acesso da NF-e (44 dígitos) contém o CNPJ do emitente nos
   // dígitos 7–20. Se o OCR não leu o CNPJ direto, derivamos da chave.
   const chaveDigits = s(ocr.nf?.chave_acesso).replace(/\D/g, "");
   const cnpjDaChave = chaveDigits.length === 44 ? chaveDigits.slice(6, 20) : "";
+  // Observações costumam trazer placa/motorista/transportador — extraímos p/
+  // preencher os campos de transporte quando o OCR não os mapeou.
+  const obs = s(ocr.dados_adicionais);
+  const placaTexto = extrairPlaca(
+    `${s(ocr.transporte?.placa_veiculo)} ${obs}`
+  );
+  const motoristaTexto = extrairMotorista(obs);
   return {
     emissor_razao: s(ocr.emissor?.razao_social),
     emissor_cnpj: s(ocr.emissor?.cnpj).replace(/\D/g, "") || cnpjDaChave,
@@ -115,8 +138,10 @@ export function ocrToForm(ocr: OCRResult): NFFormValues {
     frete_por_conta: s(ocr.transporte?.frete_por_conta),
     frete_valor: s(ocr.transporte?.frete_valor),
     distancia_km: "",
-    transportador: s(ocr.transporte?.transportador_nome),
-    placa_veiculo: s(ocr.transporte?.placa_veiculo),
+    transportador:
+      s(ocr.transporte?.transportador_nome) ||
+      (motoristaTexto ? `Motorista: ${motoristaTexto}` : ""),
+    placa_veiculo: s(ocr.transporte?.placa_veiculo) || placaTexto,
     uf_veiculo: s(ocr.transporte?.uf_veiculo),
     peso_bruto: s(ocr.transporte?.peso_bruto_ton),
     peso_liquido: s(ocr.transporte?.peso_liquido_ton),

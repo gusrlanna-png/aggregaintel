@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
-  Save,
   ScanLine,
   SkipForward,
   Upload,
@@ -40,13 +39,11 @@ export function NFImport({
     loading,
     progress,
     espera,
-    salvandoTodas,
     addFiles,
     removeFile,
     extrair,
     avancar,
     pular,
-    salvarTodas,
     setCurrent,
     updateCurrentForm,
     reset,
@@ -121,22 +118,8 @@ export function NFImport({
             <Badge variant="secondary">
               NF {current + 1} de {items.length}
             </Badge>
-            {items.length > 1 && (
-              <Button size="sm" onClick={salvarTodas} disabled={salvandoTodas}>
-                {salvandoTodas ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Salvar todas ({items.length})
-              </Button>
-            )}
           </div>
         </div>
-
-        {salvandoTodas && (
-          <Progress value={(progress.done / (progress.total || 1)) * 100} />
-        )}
 
         {items.length > 1 && (
           <>

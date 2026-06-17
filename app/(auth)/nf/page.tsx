@@ -24,6 +24,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  SortableHead,
+  sortRows,
+  useSort,
+} from "@/components/ui/sortable-table";
 import { getNFs } from "@/lib/supabase/nf";
 import { getEmissores } from "@/lib/supabase/emissores";
 import {
@@ -56,6 +61,29 @@ function precoInfo(nf: NotaFiscal) {
   return { unit, calc, diverge };
 }
 
+type NFSortKey = "numero" | "emissor" | "data" | "produto" | "qtd" | "preco";
+
+function nfSortValue(nf: NotaFiscal, key: NFSortKey): unknown {
+  switch (key) {
+    case "numero":
+      return nf.numero_nf;
+    case "emissor":
+      return nf.emissor?.razao_social ?? "";
+    case "data":
+      return nf.data_emissao;
+    case "produto":
+      return labelProduto(nf.produto_tipo);
+    case "qtd":
+      return nf.quantidade_ton;
+    case "preco": {
+      const { unit, calc } = precoInfo(nf);
+      return unit > 0 ? unit : calc;
+    }
+    default:
+      return null;
+  }
+}
+
 export default function NFListPage() {
   const router = useRouter();
   const [produto, setProduto] = React.useState("all");
@@ -81,7 +109,8 @@ export default function NFListPage() {
       }),
   });
 
-  const rows = data?.data ?? [];
+  const { sort, toggle } = useSort<NFSortKey>("data", "desc");
+  const rows = sortRows(data?.data ?? [], sort, nfSortValue);
 
   return (
     <div className="space-y-4">
@@ -168,12 +197,41 @@ export default function NFListPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>NF</TableHead>
-                  <TableHead className="hidden sm:table-cell">Emissor</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead className="text-right">Qtd (t)</TableHead>
-                  <TableHead className="text-right">Preço R$/t</TableHead>
+                  <SortableHead sortKey="numero" sort={sort} onSort={toggle}>
+                    NF
+                  </SortableHead>
+                  <SortableHead
+                    sortKey="emissor"
+                    sort={sort}
+                    onSort={toggle}
+                    className="hidden sm:table-cell"
+                  >
+                    Emissor
+                  </SortableHead>
+                  <SortableHead sortKey="data" sort={sort} onSort={toggle}>
+                    Data
+                  </SortableHead>
+                  <SortableHead sortKey="produto" sort={sort} onSort={toggle}>
+                    Produto
+                  </SortableHead>
+                  <SortableHead
+                    sortKey="qtd"
+                    sort={sort}
+                    onSort={toggle}
+                    align="right"
+                    className="text-right"
+                  >
+                    Qtd (t)
+                  </SortableHead>
+                  <SortableHead
+                    sortKey="preco"
+                    sort={sort}
+                    onSort={toggle}
+                    align="right"
+                    className="text-right"
+                  >
+                    Preço R$/t
+                  </SortableHead>
                   <TableHead className="hidden md:table-cell">Frete</TableHead>
                 </TableRow>
               </TableHeader>

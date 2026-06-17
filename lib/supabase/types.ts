@@ -61,6 +61,12 @@ export interface Cliente {
   grupo_economico: string | null; // vinculado por raiz de CNPJ ou manual
   status: string | null;
   notas: string | null;
+  // Carteira / categorização
+  porte?: string | null; // P | M | G
+  regiao_id?: string | null;
+  dono_vendedor_id?: string | null; // override individual de vendedor
+  status_validacao?: string | null; // validado | pendente
+  cliente_principal_id?: string | null; // obra/secundário vinculado a um principal
   criado_em: string;
   atualizado_em: string;
 }

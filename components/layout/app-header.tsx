@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/search/global-search";
+import { InstallButton } from "@/components/pwa/install-button";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -33,6 +34,7 @@ export function AppHeader() {
           <span className="text-base font-bold tracking-tight">AggregaIntel</span>
         </Link>
         <div className="flex items-center gap-1">
+          <InstallButton />
           <GlobalSearch variant="header" />
           {demo && (
             <Badge variant="warning" className="hidden sm:inline-flex">

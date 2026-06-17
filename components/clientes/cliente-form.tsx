@@ -27,6 +27,7 @@ import { SEGMENTOS, type Segmento } from "@/lib/utils/agregados";
 import type { Cliente, ClienteContato } from "@/lib/supabase/types";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { maskCPF, onlyDigits } from "@/lib/utils/masks";
+import { PORTES, getRegioes } from "@/lib/supabase/carteiras";
 
 type FormState = {
   razao_social: string;
@@ -40,6 +41,8 @@ type FormState = {
   uf: string;
   cep: string;
   grupo_economico: string;
+  porte: string;
+  regiao_id: string;
   notas: string;
 };
 
@@ -56,6 +59,8 @@ function fromCliente(c?: Cliente | null): FormState {
     uf: c?.uf ?? "MG",
     cep: c?.cep ?? "",
     grupo_economico: c?.grupo_economico ?? "",
+    porte: c?.porte ?? "",
+    regiao_id: c?.regiao_id ?? "",
     notas: c?.notas ?? "",
   };
 }
@@ -80,6 +85,10 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
   const { data: grupos = [] } = useQuery({
     queryKey: ["grupos-clientes"],
     queryFn: () => getGruposEconomicosClientes(),
+  });
+  const { data: regioes = [] } = useQuery({
+    queryKey: ["regioes"],
+    queryFn: getRegioes,
   });
 
   async function buscarCnpj() {
@@ -146,6 +155,8 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
         uf: f.uf || null,
         cep: f.cep || null,
         grupo_economico: f.grupo_economico.trim() || null,
+        porte: f.porte || null,
+        regiao_id: f.regiao_id || null,
         contatos: contatosLimpos,
         contato_nome: contatosLimpos[0]?.nome ?? null,
         notas: f.notas || null,
@@ -249,6 +260,38 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
                 <option key={g} value={g} />
               ))}
             </datalist>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Porte</Label>
+            <Select value={f.porte || "none"} onValueChange={(v) => set("porte", v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Porte" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— não definido —</SelectItem>
+                {PORTES.map((p) => (
+                  <SelectItem key={p.v} value={p.v}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Região (carteira)</Label>
+            <Select value={f.regiao_id || "none"} onValueChange={(v) => set("regiao_id", v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Região" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— não definida —</SelectItem>
+                {regioes.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label className="text-xs">Endereço</Label>

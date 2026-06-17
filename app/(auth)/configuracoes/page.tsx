@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Briefcase,
   CalendarDays,
   ChevronRight,
   Database,
@@ -55,6 +56,13 @@ const ITENS: ConfigItem[] = [
     titulo: "Usuários e permissões",
     descricao:
       "Perfis de acesso (admin, gestor, vendedor). Define o que cada pessoa enxerga. Apenas administradores.",
+  },
+  {
+    href: "/configuracoes/carteiras",
+    icon: Briefcase,
+    titulo: "Carteiras de vendas",
+    descricao:
+      "Carteiras por segmento + região/porte → vendedor responsável. Categoriza os clientes e prepara metas/comissionamento.",
   },
 ];
 

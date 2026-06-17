@@ -6,6 +6,7 @@ import {
   SUPABASE_URL,
   isSupabaseConfigured,
 } from "@/lib/supabase/config";
+import { podeAcessar, type Perfil } from "@/lib/auth/rotas";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -59,6 +60,14 @@ export async function middleware(request: NextRequest) {
 
   if (user && pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", base));
+  }
+
+  // Controle de acesso por perfil (RBAC) — não bloqueia rotas de API.
+  if (user && !isPublic && !pathname.startsWith("/api")) {
+    const { data: perfil } = await supabase.rpc("meu_perfil");
+    if (!podeAcessar((perfil as Perfil | null) ?? null, pathname)) {
+      return NextResponse.redirect(new URL("/dashboard", base));
+    }
   }
 
   return response;

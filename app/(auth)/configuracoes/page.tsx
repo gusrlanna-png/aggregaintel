@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Database,
   Package,
+  ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -47,6 +48,13 @@ const ITENS: ConfigItem[] = [
     titulo: "Catálogo de produtos",
     descricao:
       "Produtos identificados nas NFs. Mescle nomes similares e padronize a classificação.",
+  },
+  {
+    href: "/configuracoes/usuarios",
+    icon: ShieldCheck,
+    titulo: "Usuários e permissões",
+    descricao:
+      "Perfis de acesso (admin, gestor, vendedor). Define o que cada pessoa enxerga. Apenas administradores.",
   },
 ];
 

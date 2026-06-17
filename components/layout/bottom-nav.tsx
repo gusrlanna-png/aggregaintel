@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   Brain,
   Building2,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { getMeuPerfil } from "@/lib/supabase/perfil";
+import { podeAcessar } from "@/lib/auth/rotas";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Início" },
@@ -26,11 +29,21 @@ const NAV_ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { data: perfil } = useQuery({
+    queryKey: ["meu-perfil"],
+    queryFn: getMeuPerfil,
+  });
+
+  // Enquanto carrega (undefined) mostra tudo; depois filtra pela alçada.
+  const itens =
+    perfil === undefined
+      ? NAV_ITEMS
+      : NAV_ITEMS.filter((i) => podeAcessar(perfil, i.href));
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-safe">
       <ul className="mx-auto flex max-w-[600px] items-stretch justify-around">
-        {NAV_ITEMS.map((item) => {
+        {itens.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;

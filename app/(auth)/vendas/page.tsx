@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Database } from "lucide-react";
+import { Database, TrendingUp } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -41,14 +41,22 @@ export default function VendasPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">
-          Planejamento de vendas
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Peso e preço de 2024, 2025 e meta. Clique nos títulos para ordenar.
-          Fonte: META PREVISTA (integra sistema + meta).
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">
+            Planejamento de vendas
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Peso e preço de 2024, 2025 e meta. Clique nos títulos para ordenar.
+            Fonte: META PREVISTA (integra sistema + meta).
+          </p>
+        </div>
+        <Link
+          href="/projecao"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <TrendingUp className="h-4 w-4" /> Projeção
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

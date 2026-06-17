@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Building2, ExternalLink, Loader2, RotateCw, Save, User } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, RotateCw, Save, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { GrupoSelect } from "@/components/concorrentes/grupo-select";
+import { GrupoEmpresaCard } from "@/components/empresas/grupo-empresa-card";
+import { agruparEmpresas } from "@/lib/utils/agrupar-empresas";
+import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getGruposEconomicos } from "@/lib/supabase/emissores";
 import {
   getPessoaById,
@@ -133,6 +137,18 @@ export default function PessoaDetailPage() {
       return true;
     });
   }, [sociedades, empresas]);
+
+  // Agrupa empresas repetidas/filiais (matriz em destaque, alfabético).
+  const empresasAgrupadas = React.useMemo(
+    () => agruparEmpresas(empresas, (e) => e.cnpj, (e) => e.razao_social),
+    [empresas]
+  );
+  const sociedadesAgrupadas = React.useMemo(
+    () => agruparEmpresas(sociedadesNovas, (s) => s.cnpj, (s) => s.empresa),
+    [sociedadesNovas]
+  );
+  const ehMatriz = (cnpj?: string | null) =>
+    (cnpj ?? "").replace(/\D/g, "").slice(8, 12) === "0001";
 
   async function salvar() {
     setSalvando(true);
@@ -270,34 +286,45 @@ export default function PessoaDetailPage() {
             </p>
           ) : (
             <div className="divide-y">
-              {empresas.map((e) => (
-                <div
-                  key={e.emissor_id}
-                  className="flex flex-wrap items-center gap-2 py-2"
-                >
-                  <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <Link
-                    href={`/concorrentes/${e.emissor_id}`}
-                    className="min-w-0 flex-1 truncate text-sm hover:underline"
-                  >
-                    <span className="font-medium">{e.razao_social}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {" "}· {e.municipio ?? "—"}/{e.uf ?? ""}
-                      {e.cargo ? ` · ${e.cargo}` : ""}
-                    </span>
-                  </Link>
-                  <GrupoSelect
-                    emissorId={e.emissor_id}
-                    grupoAtual={e.grupo_economico}
-                    grupos={grupos}
-                    compact
-                    onChanged={() => {
-                      qc.invalidateQueries({ queryKey: ["pessoa-empresas", id] });
-                      qc.invalidateQueries({ queryKey: ["grupos-economicos"] });
-                      qc.invalidateQueries({ queryKey: ["produtores-mercado"] });
-                    }}
-                  />
-                </div>
+              {empresasAgrupadas.map((g) => (
+                <GrupoEmpresaCard
+                  key={g.chave}
+                  matriz={g.matriz}
+                  extras={g.unidades.slice(1)}
+                  renderUnidade={(e, isMatriz) => (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/concorrentes/${e.emissor_id}`}
+                        className="min-w-0 flex-1 truncate text-sm hover:underline"
+                      >
+                        <span className={isMatriz ? "font-semibold" : "font-medium"}>
+                          {e.razao_social}
+                        </span>
+                        {ehMatriz(e.cnpj) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">
+                            matriz
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {e.cnpj ? ` · ${mascararCnpj(e.cnpj)}` : ""} ·{" "}
+                          {e.municipio ?? "—"}/{e.uf ?? ""}
+                          {e.cargo ? ` · ${e.cargo}` : ""}
+                        </span>
+                      </Link>
+                      <GrupoSelect
+                        emissorId={e.emissor_id}
+                        grupoAtual={e.grupo_economico}
+                        grupos={grupos}
+                        compact
+                        onChanged={() => {
+                          qc.invalidateQueries({ queryKey: ["pessoa-empresas", id] });
+                          qc.invalidateQueries({ queryKey: ["grupos-economicos"] });
+                          qc.invalidateQueries({ queryKey: ["produtores-mercado"] });
+                        }}
+                      />
+                    </div>
+                  )}
+                />
               ))}
             </div>
           )}
@@ -316,46 +343,75 @@ export default function PessoaDetailPage() {
               <strong>Atualizar (web)</strong> para buscar mais.
             </p>
           ) : (
-            <ul className="space-y-1.5">
-              {sociedadesNovas.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center gap-2 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium">{s.empresa}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {[s.cnpj, s.cargo, s.situacao].filter(Boolean).join(" · ")
-                        ? ` · ${[s.cnpj, s.cargo, s.situacao].filter(Boolean).join(" · ")}`
-                        : ""}
-                    </span>
-                    {s.fonte_url && (
-                      <a href={s.fonte_url} target="_blank" rel="noreferrer" className="ml-1 text-xs text-primary hover:underline">
-                        (fonte)
-                      </a>
-                    )}
-                  </div>
-                  {s.emissor_id ? (
-                    <Link
-                      href={`/concorrentes/${s.emissor_id}`}
-                      className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                    >
-                      Ver cadastro
-                    </Link>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 shrink-0 text-xs"
-                      disabled={cadastrando === s.id}
-                      onClick={() => cadastrarSoc(s.id, s.cnpj, s.empresa)}
-                    >
-                      {cadastrando === s.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : null}
-                      Cadastrar
-                    </Button>
+            <div className="divide-y">
+              {sociedadesAgrupadas.map((g) => (
+                <GrupoEmpresaCard
+                  key={g.chave}
+                  matriz={g.matriz}
+                  extras={g.unidades.slice(1)}
+                  renderUnidade={(s) => (
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium">{s.empresa}</span>
+                        {ehMatriz(s.cnpj) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">
+                            matriz
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {[
+                            s.cnpj ? mascararCnpj(s.cnpj) : null,
+                            s.cargo,
+                            s.situacao,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                            ? ` · ${[
+                                s.cnpj ? mascararCnpj(s.cnpj) : null,
+                                s.cargo,
+                                s.situacao,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}`
+                            : ""}
+                        </span>
+                        {s.fonte_url && (
+                          <a
+                            href={s.fonte_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ml-1 text-xs text-primary hover:underline"
+                          >
+                            (fonte)
+                          </a>
+                        )}
+                      </div>
+                      {s.emissor_id ? (
+                        <Link
+                          href={`/concorrentes/${s.emissor_id}`}
+                          className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                        >
+                          Ver cadastro
+                        </Link>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 text-xs"
+                          disabled={cadastrando === s.id}
+                          onClick={() => cadastrarSoc(s.id, s.cnpj, s.empresa)}
+                        >
+                          {cadastrando === s.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          Cadastrar
+                        </Button>
+                      )}
+                    </div>
                   )}
-                </li>
+                />
               ))}
-            </ul>
+            </div>
           )}
         </CardContent>
       </Card>

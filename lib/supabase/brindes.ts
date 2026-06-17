@@ -57,6 +57,8 @@ export interface BrindeMovimento {
   pessoa_id: string | null;
   criado_em: string;
   brinde?: { nome: string } | null;
+  cliente?: { razao_social: string } | null;
+  pessoa?: { nome: string } | null;
 }
 
 /** Histórico de brindes entregues (opcional filtro por pessoa). */
@@ -67,12 +69,14 @@ export async function getHistoricoBrindes(
   const supabase = createClient();
   let q = supabase
     .from("brinde_movimentos")
-    .select("*, brinde:brindes(nome)")
+    .select(
+      "*, brinde:brindes(nome), cliente:clientes(razao_social), pessoa:pessoas(nome)"
+    )
     .eq("tipo", "saida")
     .order("criado_em", { ascending: false })
-    .limit(500);
+    .limit(2000);
   if (pessoaId) q = q.eq("pessoa_id", pessoaId);
   const { data, error } = await q;
   if (error) throw error;
-  return (data as BrindeMovimento[]) ?? [];
+  return (data as unknown as BrindeMovimento[]) ?? [];
 }

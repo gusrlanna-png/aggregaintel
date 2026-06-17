@@ -18,6 +18,7 @@ import { GrupoEmpresaCard } from "@/components/empresas/grupo-empresa-card";
 import { agruparEmpresas } from "@/lib/utils/agrupar-empresas";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getGruposEconomicos } from "@/lib/supabase/emissores";
+import { getHistoricoBrindes } from "@/lib/supabase/brindes";
 import {
   getPessoaById,
   getEmpresasDaPessoa,
@@ -85,6 +86,10 @@ export default function PessoaDetailPage() {
   const { data: sociedades = [] } = useQuery({
     queryKey: ["pessoa-sociedades", id],
     queryFn: () => getPessoaSociedades(id),
+  });
+  const { data: brindesRecebidos = [] } = useQuery({
+    queryKey: ["pessoa-brindes", id],
+    queryFn: () => getHistoricoBrindes(id),
   });
 
   async function atualizarWeb() {
@@ -441,6 +446,38 @@ export default function PessoaDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Brindes recebidos */}
+      {brindesRecebidos.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-sm font-medium">
+              Brindes recebidos ({brindesRecebidos.length})
+            </p>
+            <ul className="divide-y">
+              {brindesRecebidos.map((b) => (
+                <li
+                  key={b.id}
+                  className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {b.brinde?.nome ?? "—"}
+                    {b.cliente?.razao_social ? (
+                      <span className="text-xs text-muted-foreground">
+                        {" "}
+                        · {b.cliente.razao_social}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {b.quantidade} un. · {(b.criado_em ?? "").slice(0, 10)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

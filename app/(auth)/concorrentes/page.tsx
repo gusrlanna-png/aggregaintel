@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BuscaTabela, normalizar } from "@/components/ui/busca-tabela";
+import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,7 +28,6 @@ import { getMercados, emissoresDoMercado } from "@/lib/supabase/mercados";
 import { fmtReais } from "@/lib/utils/agregados";
 
 const LIMITE = 150;
-const soDig = (s?: string | null) => (s ?? "").replace(/\D/g, "");
 
 function corGrupo(g?: string | null) {
   if (!g) return "#94a3b8";
@@ -71,25 +70,26 @@ export default function ConcorrentesPage() {
   );
 
   const filtrados = React.useMemo(() => {
-    const q = normalizar(busca);
-    const qDig = soDig(busca);
     return todos.filter((p) => {
       if (mercadoSet && !mercadoSet.has(p.id)) return false;
       if (status === "ativo" && !p.ativo) return false;
       if (status === "inativo" && p.ativo) return false;
       if (grupoFiltro === "__sem__" && p.grupo_economico) return false;
-      if (grupoFiltro !== "all" && grupoFiltro !== "__sem__" && p.grupo_economico !== grupoFiltro)
+      if (
+        grupoFiltro !== "all" &&
+        grupoFiltro !== "__sem__" &&
+        p.grupo_economico !== grupoFiltro
+      )
         return false;
-      if (q) {
-        const campos = normalizar(
-          `${p.razao_social} ${p.municipio ?? ""} ${p.substancias ?? ""} ${p.grupo_economico ?? ""}`
-        );
-        const hit =
-          campos.includes(q) ||
-          (qDig.length >= 3 && soDig(p.cnpj).includes(qDig));
-        if (!hit) return false;
-      }
-      return true;
+      return matchBusca(
+        busca,
+        p.razao_social,
+        p.cnpj,
+        p.municipio,
+        p.uf,
+        p.substancias,
+        p.grupo_economico
+      );
     });
   }, [todos, busca, status, grupoFiltro, mercadoSet]);
 

@@ -29,6 +29,7 @@ import {
   sortRows,
   useSort,
 } from "@/components/ui/sortable-table";
+import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { getNFs } from "@/lib/supabase/nf";
 import { getEmissores } from "@/lib/supabase/emissores";
 import {
@@ -109,8 +110,22 @@ export default function NFListPage() {
       }),
   });
 
+  const [busca, setBusca] = React.useState("");
   const { sort, toggle } = useSort<NFSortKey>("data", "desc");
-  const rows = sortRows(data?.data ?? [], sort, nfSortValue);
+  const base = (data?.data ?? []).filter((nf) =>
+    matchBusca(
+      busca,
+      nf.numero_nf,
+      nf.serie,
+      nf.emissor?.razao_social,
+      labelProduto(nf.produto_tipo),
+      nf.produto_desc,
+      nf.valor_total,
+      nf.valor_unitario,
+      nf.data_emissao
+    )
+  );
+  const rows = sortRows(base, sort, nfSortValue);
 
   return (
     <div className="space-y-4">
@@ -118,7 +133,7 @@ export default function NFListPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Notas Fiscais</h1>
           <p className="text-sm text-muted-foreground">
-            {data ? `${data.count} NF(s)` : "Carregando…"} · duplo clique para
+            {data ? `${rows.length} NF(s)` : "Carregando…"} · duplo clique para
             editar
           </p>
         </div>
@@ -129,6 +144,13 @@ export default function NFListPage() {
           <Package className="h-4 w-4" /> Produtos
         </Link>
       </div>
+
+      <BuscaTabela
+        value={busca}
+        onChange={setBusca}
+        placeholder="Buscar NF: número, emissor, produto, valor…"
+        id="nf"
+      />
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-5">

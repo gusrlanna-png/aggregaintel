@@ -64,3 +64,21 @@ export function normalizar(s: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "");
 }
+
+/**
+ * Matcher único de busca do sistema: confere a query contra TODOS os campos
+ * passados (texto normalizado, sem acento) e também por dígitos (CNPJ/CPF/nº).
+ * Vazio = casa tudo. Use em qualquer lista: matchBusca(q, a, b, c).
+ */
+export function matchBusca(
+  busca: string,
+  ...campos: (string | number | null | undefined)[]
+): boolean {
+  const q = normalizar((busca ?? "").trim());
+  if (!q) return true;
+  const join = campos.map((c) => (c == null ? "" : String(c))).join(" ");
+  if (normalizar(join).includes(q)) return true;
+  const qd = (busca ?? "").replace(/\D/g, "");
+  if (qd.length >= 2 && join.replace(/\D/g, "").includes(qd)) return true;
+  return false;
+}

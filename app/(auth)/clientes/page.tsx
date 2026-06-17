@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { BuscaTabela } from "@/components/ui/busca-tabela";
+import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -20,7 +20,6 @@ import { getClienteIdsComTraco } from "@/lib/supabase/consumo";
 import { SEGMENTOS, type Segmento } from "@/lib/utils/agregados";
 
 const LIMITE = 150;
-const soDigitos = (s: string) => s.replace(/\D/g, "");
 
 export default function ClientesPage() {
   const [busca, setBusca] = React.useState("");
@@ -51,19 +50,20 @@ export default function ClientesPage() {
   );
 
   const filtrados = React.useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    const qDig = soDigitos(busca);
     return todos.filter((c) => {
       if (segmento !== "all" && c.segmento !== segmento) return false;
       if (grupo !== "all" && c.grupo_economico !== grupo) return false;
-      if (q) {
-        const nome = c.razao_social?.toLowerCase() ?? "";
-        const cnpj = c.cnpj ?? "";
-        const hit =
-          nome.includes(q) || (qDig.length >= 3 && soDigitos(cnpj).includes(qDig));
-        if (!hit) return false;
-      }
-      return true;
+      return matchBusca(
+        busca,
+        c.razao_social,
+        c.fantasia,
+        c.cnpj,
+        c.cpf,
+        c.municipio,
+        c.uf,
+        c.grupo_economico,
+        c.segmento
+      );
     });
   }, [todos, busca, segmento, grupo]);
 
@@ -95,7 +95,7 @@ export default function ClientesPage() {
           value={busca}
           onChange={setBusca}
           sugestoes={todos.map((c) => c.razao_social)}
-          placeholder="Buscar por nome ou CNPJ…"
+          placeholder="Buscar por nome, CNPJ, município, grupo, segmento…"
           id="clientes"
         />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

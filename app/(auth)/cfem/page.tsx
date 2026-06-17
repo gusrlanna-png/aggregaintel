@@ -15,8 +15,8 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -38,11 +38,8 @@ export default function CfemPage() {
   });
   const lista = cfem ?? [];
 
-  const rows = lista.filter(
-    (c) =>
-      !busca ||
-      c.razao_titular?.toLowerCase().includes(busca.toLowerCase()) ||
-      c.municipio?.toLowerCase().includes(busca.toLowerCase())
+  const rows = lista.filter((c) =>
+    matchBusca(busca, c.razao_titular, c.cnpj_titular, c.municipio)
   );
 
   const top = [...lista]
@@ -112,10 +109,11 @@ export default function CfemPage() {
         </CardContent>
       </Card>
 
-      <Input
-        placeholder="Buscar titular ou município…"
+      <BuscaTabela
         value={busca}
-        onChange={(e) => setBusca(e.target.value)}
+        onChange={setBusca}
+        placeholder="Buscar por titular, CNPJ ou município…"
+        id="cfem"
       />
 
       <Card>

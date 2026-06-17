@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, User } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { BuscaTabela, normalizar } from "@/components/ui/busca-tabela";
+import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPessoas } from "@/lib/supabase/pessoas";
 
@@ -22,9 +22,9 @@ export default function PessoasPage() {
 
   const todos = React.useMemo(() => data ?? [], [data]);
   const filtrados = React.useMemo(() => {
-    const q = normalizar(busca);
-    if (!q) return todos;
-    return todos.filter((p) => normalizar(`${p.nome} ${p.municipio ?? ""}`).includes(q));
+    return todos.filter((p) =>
+      matchBusca(busca, p.nome, p.cpf, p.municipio, p.uf)
+    );
   }, [todos, busca]);
   const visiveis = filtrados.slice(0, LIMITE);
 
@@ -44,7 +44,7 @@ export default function PessoasPage() {
         value={busca}
         onChange={setBusca}
         sugestoes={todos.map((p) => p.nome)}
-        placeholder="Buscar pessoa por nome ou município…"
+        placeholder="Buscar por nome, CPF, município, UF…"
         id="pessoas"
       />
 

@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { href: "/nf", icon: FileText, label: "NFs" },
   { href: "/concorrentes", icon: Building2, label: "Mercado" },
   { href: "/clientes", icon: Users, label: "Clientes" },
-  { href: "/pessoas", icon: User, label: "Pessoas" },
+  { href: "/pessoas", icon: User, label: "Contatos" },
   { href: "/inteligencia", icon: Brain, label: "Intel" },
   { href: "/configuracoes", icon: Settings, label: "Config" },
 ];

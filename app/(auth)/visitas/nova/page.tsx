@@ -7,9 +7,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Building2,
+  ExternalLink,
   Gift,
   LocateFixed,
   Loader2,
+  MapPin,
   Plus,
   Save,
   Trash2,
@@ -33,8 +35,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MoneyInput, NumberInput } from "@/components/ui/masked-input";
+import { cn } from "@/lib/utils";
+import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getClientes } from "@/lib/supabase/clientes";
-import { getPessoas } from "@/lib/supabase/pessoas";
+import { getPessoas, getContatosCliente } from "@/lib/supabase/pessoas";
 import { getBrindes } from "@/lib/supabase/brindes";
 import {
   cadastrarClientePendente,
@@ -47,6 +51,89 @@ import {
   type VisitaPessoaInput,
 } from "@/lib/supabase/visitas";
 import { SEGMENTOS, type Segmento } from "@/lib/utils/agregados";
+
+const DRAFT_KEY = "visita-nova-draft";
+
+/** Texto de localização do cliente: bairro · município/UF. */
+function localCliente(c: { bairro?: string | null; municipio?: string | null; uf?: string | null }): string {
+  const cidadeUf = [c.municipio, c.uf].filter(Boolean).join("/");
+  return [c.bairro, cidadeUf].filter(Boolean).join(" · ");
+}
+
+type ClienteBusca = {
+  id?: string;
+  razao_social: string;
+  fantasia?: string | null;
+  cnpj?: string | null;
+  status?: string | null;
+  bairro?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+};
+
+/** Inativo quando o status indica explicitamente baixa/inapto/inativo/suspenso. */
+function clienteInativo(c: { status?: string | null }): boolean {
+  const s = (c.status ?? "").toLowerCase();
+  return /inativ|baixad|baixa|inapt|suspens|nula/.test(s);
+}
+
+/** Linha de cliente nas listas de busca: fantasia (forte) + razão + CNPJ + local + status. */
+function ClienteLinha({ c }: { c: ClienteBusca }) {
+  const titulo = c.fantasia?.trim() || c.razao_social;
+  const sub = c.fantasia?.trim() ? c.razao_social : "";
+  const local = localCliente(c);
+  const cnpj = c.cnpj ? mascararCnpj(c.cnpj) : "";
+  const inativo = clienteInativo(c);
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="flex items-center gap-1.5">
+        <span className="truncate font-medium">{titulo}</span>
+        <span
+          className={cn(
+            "shrink-0 rounded px-1 text-[9px] font-medium uppercase",
+            inativo
+              ? "bg-destructive/15 text-destructive"
+              : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+          )}
+        >
+          {inativo ? "inativo" : "ativo"}
+        </span>
+      </span>
+      {sub && <span className="block truncate text-xs text-muted-foreground">{sub}</span>}
+      {cnpj && <span className="block truncate text-xs tabular-nums text-muted-foreground">{cnpj}</span>}
+      {local && (
+        <span className="block truncate text-xs text-muted-foreground">
+          <MapPin className="mr-0.5 inline h-3 w-3" />
+          {local}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Chave de deduplicação: CNPJ (dígitos) quando houver; senão razão+município+UF. */
+function chaveDedup(c: ClienteBusca): string {
+  const dig = (c.cnpj ?? "").replace(/\D/g, "");
+  if (dig.length >= 8) return `cnpj:${dig}`;
+  return `nome:${c.razao_social.trim().toLowerCase()}|${(c.municipio ?? "").toLowerCase()}|${(c.uf ?? "").toLowerCase()}`;
+}
+
+/** Remove duplicatas, preferindo o registro com fantasia e CNPJ (mais completo). */
+function dedupClientes<T extends ClienteBusca>(itens: T[]): T[] {
+  const mapa = new Map<string, T>();
+  for (const it of itens) {
+    const k = chaveDedup(it);
+    const atual = mapa.get(k);
+    if (!atual) {
+      mapa.set(k, it);
+      continue;
+    }
+    const score = (x: ClienteBusca) =>
+      (x.fantasia?.trim() ? 2 : 0) + (x.cnpj ? 1 : 0);
+    if (score(it) > score(atual)) mapa.set(k, it);
+  }
+  return [...mapa.values()];
+}
 
 export default function NovaVisitaPage() {
   const router = useRouter();
@@ -80,6 +167,49 @@ export default function NovaVisitaPage() {
   const [brindes, setBrindes] = React.useState<BrindeEntregaInput[]>([]);
   const [salvando, setSalvando] = React.useState(false);
 
+  // Rascunho: ao abrir o cadastro de um cliente (ou sair e voltar), o estágio do
+  // preenchimento é restaurado — premissa do sistema "voltar ao ponto que parou".
+  const restauradoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (restauradoRef.current) return;
+    restauradoRef.current = true;
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.clienteId) setClienteId(d.clienteId);
+      if (d.modoNovo) setModoNovo(d.modoNovo);
+      if (d.novoNome) setNovoNome(d.novoNome);
+      if (d.novoSegmento) setNovoSegmento(d.novoSegmento);
+      if (Array.isArray(d.pessoas)) setPessoas(d.pessoas);
+      if (d.motivoId) setMotivoId(d.motivoId);
+      if (d.categoriaId) setCategoriaId(d.categoriaId);
+      if (d.segmento) setSegmento(d.segmento);
+      if (d.obs) setObs(d.obs);
+      if (d.perda) setPerda(d.perda);
+      if (Array.isArray(d.concorrentes)) setConcorrentes(d.concorrentes);
+      if (Array.isArray(d.brindes)) setBrindes(d.brindes);
+      if (d.avulsa) setAvulsa(d.avulsa);
+      if (d.chegada) setChegada(d.chegada);
+      if (d.saida) setSaida(d.saida);
+    } catch {
+      /* rascunho inválido — ignora */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!restauradoRef.current) return;
+    const draft = {
+      clienteId, modoNovo, novoNome, novoSegmento, pessoas, motivoId,
+      categoriaId, segmento, obs, perda, concorrentes, brindes, avulsa, chegada, saida,
+    };
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      /* quota — ignora */
+    }
+  }, [clienteId, modoNovo, novoNome, novoSegmento, pessoas, motivoId, categoriaId, segmento, obs, perda, concorrentes, brindes, avulsa, chegada, saida]);
+
   const { data: clientes = [] } = useQuery({
     queryKey: ["clientes-list-visita"],
     queryFn: () => getClientes(),
@@ -94,6 +224,11 @@ export default function NovaVisitaPage() {
     queryFn: getCategorias,
   });
   const { data: catalogoBrindes = [] } = useQuery({ queryKey: ["brindes"], queryFn: getBrindes });
+  const { data: contatosCliente = [] } = useQuery({
+    queryKey: ["cliente-contatos", clienteId],
+    queryFn: () => getContatosCliente(clienteId!),
+    enabled: !!clienteId,
+  });
 
   const pegarLocal = React.useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -116,26 +251,38 @@ export default function NovaVisitaPage() {
 
   const proximos = React.useMemo(() => {
     if (!coords) return [];
-    return clientes
+    const ordenados = clientes
       .filter((c) => c.lat != null && c.lng != null)
       .map((c) => ({
         c,
         dist: distanciaMetros(coords.lat, coords.lng, c.lat as number, c.lng as number),
       }))
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 12);
+      .sort((a, b) => a.dist - b.dist);
+    // Dedup mantendo a unidade mais próxima de cada cliente/CNPJ.
+    const vistos = new Set<string>();
+    const unicos: typeof ordenados = [];
+    for (const item of ordenados) {
+      const k = chaveDedup(item.c);
+      if (vistos.has(k)) continue;
+      vistos.add(k);
+      unicos.push(item);
+    }
+    return unicos.slice(0, 12);
   }, [coords, clientes]);
 
   const buscados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return [];
-    return clientes
-      .filter(
-        (c) =>
-          c.razao_social.toLowerCase().includes(q) ||
-          (c.fantasia ?? "").toLowerCase().includes(q)
-      )
-      .slice(0, 8);
+    const qDig = q.replace(/\D/g, "");
+    const achados = clientes.filter(
+      (c) =>
+        c.razao_social.toLowerCase().includes(q) ||
+        (c.fantasia ?? "").toLowerCase().includes(q) ||
+        (c.municipio ?? "").toLowerCase().includes(q) ||
+        (c.bairro ?? "").toLowerCase().includes(q) ||
+        (qDig.length >= 3 && (c.cnpj ?? "").replace(/\D/g, "").includes(qDig))
+    );
+    return dedupClientes(achados).slice(0, 8);
   }, [busca, clientes]);
 
   const pessoasBuscadas = React.useMemo(() => {
@@ -239,6 +386,11 @@ export default function NovaVisitaPage() {
           brindes: exigeBrinde ? brindes : [],
         }
       );
+      try {
+        sessionStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignora */
+      }
       toast.success("Visita registrada.");
       router.push("/visitas");
       router.refresh();
@@ -311,19 +463,76 @@ export default function NovaVisitaPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {clienteSel && !modoNovo ? (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{clienteSel.razao_social}</span>
-                <span className="text-xs text-muted-foreground">
-                  {[clienteSel.municipio, clienteSel.uf].filter(Boolean).join("/")}
-                  {clienteSel.segmento ? ` · ${clienteSel.segmento}` : ""}
-                  {distCliente != null ? ` · ${(distCliente / 1000).toFixed(2)} km` : ""}
-                </span>
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => setClienteId(null)}>
-                <X className="h-4 w-4" /> Trocar
-              </Button>
-            </div>
+            <>
+              <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {clienteSel.fantasia?.trim() || clienteSel.razao_social}
+                    </span>
+                    {clienteSel.fantasia?.trim() && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {clienteSel.razao_social}
+                      </span>
+                    )}
+                    <span className="block text-xs text-muted-foreground">
+                      {localCliente(clienteSel)}
+                      {clienteSel.segmento ? ` · ${clienteSel.segmento}` : ""}
+                      {distCliente != null ? ` · ${(distCliente / 1000).toFixed(2)} km` : ""}
+                    </span>
+                  </span>
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setClienteId(null)}>
+                    <X className="h-4 w-4" /> Trocar
+                  </Button>
+                </div>
+                <Button asChild variant="outline" size="sm" className="mt-2 h-8 w-full text-xs">
+                  <Link href={`/clientes/${clienteSel.id}?retorno=${encodeURIComponent("/visitas/nova")}`}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Abrir cadastro (consultar/editar)
+                  </Link>
+                </Button>
+              </div>
+              {contatosCliente.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Contatos cadastrados deste cliente
+                  </p>
+                  <div className="divide-y rounded-md border">
+                    {contatosCliente.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2 p-2 text-sm">
+                        <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{c.pessoa?.nome}</p>
+                          {c.cargo && (
+                            <p className="text-xs text-muted-foreground">{c.cargo}</p>
+                          )}
+                        </div>
+                        {c.pessoa?.fone && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {c.pessoa.fone}
+                          </span>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 text-xs"
+                          onClick={() => {
+                            if (!pessoas.find((p) => p.pessoa_id === c.pessoa_id)) {
+                              addPessoa({
+                                pessoa_id: c.pessoa_id,
+                                pessoa_nome: c.pessoa?.nome ?? "",
+                                cargo: c.cargo ?? "",
+                              });
+                            }
+                          }}
+                        >
+                          + Visita
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : modoNovo ? (
             <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
               <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -352,21 +561,21 @@ export default function NovaVisitaPage() {
                       <button key={c.id} type="button" onClick={() => selecionar(c.id, c.segmento)}
                         className="flex w-full items-center gap-2 p-2 text-left text-sm hover:bg-muted/50">
                         <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate">{c.razao_social}</span>
+                        <ClienteLinha c={c} />
                         <Badge variant="secondary" className="shrink-0 text-[10px]">{(dist / 1000).toFixed(2)} km</Badge>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente por nome…" />
+              <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por fantasia, razão social ou cidade…" />
               {buscados.length > 0 && (
                 <div className="divide-y rounded-md border">
                   {buscados.map((c) => (
                     <button key={c.id} type="button" onClick={() => { selecionar(c.id, c.segmento); setBusca(""); }}
                       className="flex w-full items-center gap-2 p-2 text-left text-sm hover:bg-muted/50">
                       <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{c.razao_social}</span>
+                      <ClienteLinha c={c} />
                     </button>
                   ))}
                 </div>

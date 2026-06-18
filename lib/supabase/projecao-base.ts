@@ -27,3 +27,26 @@ export async function getProjecaoClientes(): Promise<ProjecaoCliente[]> {
   if (error) throw error;
   return (data as ProjecaoCliente[]) ?? [];
 }
+
+export interface PrecoEfetivoCnpj {
+  cnpj_digitos: string;
+  preco_efetivo: number;
+  ton: number;
+  nfs: number;
+}
+
+/**
+ * Preço efetivo real das NFs por CNPJ (valor líquido ÷ toneladas, ponderado).
+ * Devolve um mapa cnpj_digitos → dados, para cruzar com a projeção do BI.
+ */
+export async function getPrecoEfetivoPorCnpj(): Promise<Map<string, PrecoEfetivoCnpj>> {
+  const mapa = new Map<string, PrecoEfetivoCnpj>();
+  if (!isSupabaseConfigured()) return mapa;
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("nf_preco_efetivo_cliente");
+  if (error) throw error;
+  for (const r of (data as PrecoEfetivoCnpj[]) ?? []) {
+    if (r.cnpj_digitos) mapa.set(r.cnpj_digitos, r);
+  }
+  return mapa;
+}

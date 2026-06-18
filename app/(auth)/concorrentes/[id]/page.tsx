@@ -28,8 +28,6 @@ import { GrupoArvore } from "@/components/concorrentes/grupo-arvore";
 import {
   getEmissorComNFs,
   upsertEmissor,
-  atualizarCadastralEmissor,
-  salvarSocios,
   getSocios,
   getUnidadesPorRaiz,
   getGruposEconomicos,
@@ -41,7 +39,7 @@ import {
   getProcessosAmbientais,
   getLinksEmpresa,
 } from "@/lib/supabase/cadastro-empresa";
-import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
+import { enqueueJob } from "@/lib/jobs/client";
 import { EmissorNFsTab } from "@/components/concorrentes/emissor-nfs-tab";
 import {
   isMbvEmissor,
@@ -82,31 +80,25 @@ export default function ConcorrenteDetailPage() {
     if (!data) return;
     setAtualizando(true);
     try {
-      const c = await buscarCadastroCnpj(data.emissor.cnpj);
-      await atualizarCadastralEmissor(data.emissor.id, {
-        razao_social: c.razao_social ?? data.emissor.razao_social,
-        cnpj: c.cnpj ?? data.emissor.cnpj ?? undefined,
-        logradouro: c.logradouro,
-        municipio: c.municipio,
-        uf: c.uf,
-        cep: c.cep,
-        fone: c.fone,
-        data_fundacao: c.data_fundacao,
-        situacao_cadastral: c.situacao,
-        atividade_principal: c.atividade_principal,
-        capital_social: c.capital_social,
-        natureza_juridica: c.natureza_juridica,
-        matriz_filial: c.matriz_filial,
+      await enqueueJob({
+        tipo: "cascade_update",
+        titulo: `Atualizar em cadeia: ${data.emissor.razao_social}`,
+        entidade_tipo: "emissor",
+        entidade_id: data.emissor.id,
+        payload: { emissorId: data.emissor.id },
       });
-      await salvarSocios(data.emissor.id, c.socios ?? []);
-      await queryClient.invalidateQueries({ queryKey: ["emissor", id] });
-      await queryClient.invalidateQueries({ queryKey: ["socios", id] });
-      await queryClient.invalidateQueries({ queryKey: ["produtores-mercado"] });
       toast.success(
-        `Dados atualizados via Receita Federal${c.situacao ? ` · ${c.situacao}` : ""} · ${(c.socios ?? []).length} sócio(s).`
+        "Atualização em cadeia iniciada em segundo plano (empresa + grupo + sócios). Pode sair da página — acompanhe em 'Tarefas'."
       );
+      for (const ms of [10000, 25000, 45000, 70000]) {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["emissor", id] });
+          queryClient.invalidateQueries({ queryKey: ["socios", id] });
+          queryClient.invalidateQueries({ queryKey: ["produtores-mercado"] });
+        }, ms);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao atualizar dados.");
+      toast.error(e instanceof Error ? e.message : "Erro ao iniciar a tarefa.");
     } finally {
       setAtualizando(false);
     }
@@ -233,6 +225,9 @@ export default function ConcorrenteDetailPage() {
   }
 
   const { emissor, nfs, grupo } = data;
+  // NFs desconsideradas saem de todos os cálculos de produção/projeção,
+  // mas continuam visíveis (marcadas) na aba de NFs.
+  const nfsAtivas = nfs.filter((n) => !n.desconsiderada);
   const mbv = isMbvEmissor(emissor);
 
   return (
@@ -531,7 +526,7 @@ export default function ConcorrenteDetailPage() {
         </TabsContent>
 
         <TabsContent value="producao">
-          <ProjecaoUI emissorId={emissor.id} nfs={nfs} />
+          <ProjecaoUI emissorId={emissor.id} nfs={nfsAtivas} />
         </TabsContent>
 
         <TabsContent value="nfs">

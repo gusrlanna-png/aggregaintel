@@ -4,6 +4,12 @@ const withPWA = require("next-pwa")({
   disable: process.env.NODE_ENV === "development",
   register: true,
   skipWaiting: true,
+  // Após um novo deploy, o SW novo assume o controle na hora (clientsClaim) e
+  // apaga o precache/caches antigos (cleanupOutdatedCaches). Sem isso, um PWA já
+  // instalado pode servir chunks antigos que não existem mais no servidor,
+  // causando "client-side exception"/tela branca após cada atualização.
+  clientsClaim: true,
+  cleanupOutdatedCaches: true,
   runtimeCaching: [
     {
       urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/,
@@ -28,6 +34,10 @@ const withPWA = require("next-pwa")({
 
 const nextConfig = {
   reactStrictMode: true,
+  // Permite buildar para uma pasta separada (.next-new) e só então trocar pela
+  // ativa — evita servir chunks inconsistentes durante o deploy. O `next start`
+  // (sem a env) continua lendo `.next`. Ver scripts/deploy.sh.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },

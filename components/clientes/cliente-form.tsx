@@ -41,6 +41,7 @@ type FormState = {
   uf: string;
   cep: string;
   grupo_economico: string;
+  transportadora: string;
   porte: string;
   regiao_id: string;
   notas: string;
@@ -59,6 +60,7 @@ function fromCliente(c?: Cliente | null): FormState {
     uf: c?.uf ?? "MG",
     cep: c?.cep ?? "",
     grupo_economico: c?.grupo_economico ?? "",
+    transportadora: c?.transportadora ?? "",
     porte: c?.porte ?? "",
     regiao_id: c?.regiao_id ?? "",
     notas: c?.notas ?? "",
@@ -71,7 +73,14 @@ function contatosFromCliente(c?: Cliente | null): ClienteContato[] {
   return [];
 }
 
-export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
+export function ClienteForm({
+  cliente,
+  retorno,
+}: {
+  cliente?: Cliente | null;
+  /** Quando presente, após salvar volta ao detalhe preservando a origem (ex.: visita). */
+  retorno?: string | null;
+}) {
   const router = useRouter();
   const [f, setF] = React.useState<FormState>(fromCliente(cliente));
   const [contatos, setContatos] = React.useState<ClienteContato[]>(
@@ -155,6 +164,7 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
         uf: f.uf || null,
         cep: f.cep || null,
         grupo_economico: f.grupo_economico.trim() || null,
+        transportadora: f.transportadora.trim() || null,
         porte: f.porte || null,
         regiao_id: f.regiao_id || null,
         contatos: contatosLimpos,
@@ -164,7 +174,9 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
       // Vincula automaticamente por raiz de CNPJ (mesma empresa-mãe/filiais).
       if (saved.cnpj) await vincularGrupoPorCnpj(saved.id);
       toast.success(cliente ? "Cliente atualizado." : "Cliente cadastrado.");
-      router.push(`/clientes/${saved.id}`);
+      router.push(
+        `/clientes/${saved.id}${retorno ? `?retorno=${encodeURIComponent(retorno)}` : ""}`
+      );
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar.");
@@ -260,6 +272,14 @@ export function ClienteForm({ cliente }: { cliente?: Cliente | null }) {
                 <option key={g} value={g} />
               ))}
             </datalist>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Transportadora</Label>
+            <Input
+              value={f.transportadora}
+              onChange={(e) => set("transportadora", e.target.value)}
+              placeholder="Transportadora habitual deste cliente"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Porte</Label>

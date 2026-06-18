@@ -164,6 +164,8 @@ export function NFImport({
           key={current}
           initial={item.form}
           imageUrl={item.isPdf ? null : item.previewUrl}
+          sourceFile={item.file}
+          nfId={item.nfId}
           onSaved={avancar}
           onFormChange={updateCurrentForm}
           submitLabel={last ? "Salvar NF" : "Salvar e próxima"}

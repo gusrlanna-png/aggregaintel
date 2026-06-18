@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getVisitaById } from "@/lib/supabase/visitas";
+import { VisitaAnexos } from "@/components/visitas/visita-anexos";
 
 export default function VisitaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -161,6 +162,8 @@ export default function VisitaDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <VisitaAnexos visitaId={id} />
     </div>
   );
 }

@@ -22,6 +22,13 @@ interface Sintese {
   pontos: string[];
 }
 
+interface VisitaCandidata {
+  cliente_nome: string;
+  data: string | null;
+  resumo: string;
+  perda_venda?: boolean;
+}
+
 const KEYWORDS = [
   "preç","preco","r$","/t","tonelada","ton","m³","m3","brita","areia","pedra",
   "pó de pedra","bica","frete","carrad","carga","concorr","cliente","usina",
@@ -122,9 +129,10 @@ export async function POST(req: NextRequest) {
 Analise a conversa de WhatsApp abaixo e responda SOMENTE com JSON no formato:
 {
   "items": [{"classificacao":"preco|volume|concorrente|cliente|alerta|outro","confianca":"alta|media|baixa","texto_extraido":"...","valor_num":number|null,"unidade":"R$/t|R$/m³|t|null","tags":["..."],"data_info":"AAAA-MM-DD|null","cliente_nome":"empresa citada ou null"}],
-  "sinteses": [{"cliente_nome":"nome do cliente/empresa","resumo":"síntese objetiva do que foi falado sobre este cliente","pontos":["preço X","volume Y","..."]}]
+  "sinteses": [{"cliente_nome":"nome do cliente/empresa","resumo":"síntese objetiva do que foi falado sobre este cliente","pontos":["preço X","volume Y","..."]}],
+  "visitas": [{"cliente_nome":"nome do cliente/empresa visitado ou contatado","data":"AAAA-MM-DD (data da interação)","resumo":"o que foi tratado nesta interação","perda_venda":true|false}]
 }
-Regras: 'items' = apenas mensagens relevantes. 'sinteses' = um resumo POR CLIENTE/EMPRESA citado (agrupe tudo de cada um). Se não houver cliente claro, use "Geral".
+Regras: 'items' = apenas mensagens relevantes. 'sinteses' = um resumo POR CLIENTE/EMPRESA citado (agrupe tudo de cada um). 'visitas' = uma entrada por cliente+data quando houver uma interação comercial datada (visita, contato, negociação) — use a data da mensagem; só inclua se houver cliente identificável (não "Geral"). Se não houver cliente claro, use "Geral".
 
 CONVERSA:
 ${trecho}`;
@@ -133,10 +141,16 @@ ${trecho}`;
     const parsed = parseJsonLoose(text) as {
       items?: IntelItem[];
       sinteses?: Sintese[];
+      visitas?: VisitaCandidata[];
     } | null;
 
     const items = Array.isArray(parsed?.items) ? parsed!.items : [];
     const sinteses = Array.isArray(parsed?.sinteses) ? parsed!.sinteses : [];
+    const visitas = Array.isArray(parsed?.visitas)
+      ? parsed!.visitas.filter(
+          (v) => v && v.cliente_nome && v.cliente_nome.toLowerCase() !== "geral"
+        )
+      : [];
 
     if (items.length === 0 && sinteses.length === 0) {
       const h = heuristicParse(conteudo);
@@ -154,6 +168,7 @@ ${trecho}`;
       relevantes: items.length,
       items,
       sinteses,
+      visitas,
       metodo: "ia",
     });
   } catch {

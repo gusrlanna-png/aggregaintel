@@ -2,6 +2,8 @@ import { AppHeader } from "@/components/layout/app-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { ImportProvider } from "@/components/import/import-provider";
 import { ImportIndicator } from "@/components/import/import-indicator";
+import { JobsIndicator } from "@/components/jobs/jobs-indicator";
+import { ChatWidget } from "@/components/chat/chat-widget";
 
 export default function AuthLayout({
   children,
@@ -16,6 +18,8 @@ export default function AuthLayout({
           {children}
         </main>
         <ImportIndicator />
+        <JobsIndicator />
+        <ChatWidget />
         <BottomNav />
       </div>
     </ImportProvider>

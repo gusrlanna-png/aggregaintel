@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Camera } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -55,17 +56,24 @@ export function EmissorNFsTab({
 }) {
   const [fNumero, setFNumero] = React.useState("");
   const [fProduto, setFProduto] = React.useState("all");
+  const [ocultarDesc, setOcultarDesc] = React.useState(false);
   const { sort, toggle } = useSort<SortKey>("data", "desc");
+
+  const nDesconsideradas = React.useMemo(
+    () => nfs.filter((n) => n.desconsiderada).length,
+    [nfs]
+  );
 
   const filtradas = React.useMemo(() => {
     const num = fNumero.trim();
     return nfs.filter((nf) => {
+      if (ocultarDesc && nf.desconsiderada) return false;
       if (num && !String(nf.numero_nf).includes(num.replace(/\D/g, "")))
         return false;
       if (fProduto !== "all" && nf.produto_tipo !== fProduto) return false;
       return true;
     });
-  }, [nfs, fNumero, fProduto]);
+  }, [nfs, fNumero, fProduto, ocultarDesc]);
 
   const rows = sortRows(filtradas, sort, sortValue);
 
@@ -99,6 +107,18 @@ export function EmissorNFsTab({
           <Camera className="h-4 w-4" /> Importar NF
         </Link>
       </div>
+
+      {nDesconsideradas > 0 && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-primary"
+            checked={ocultarDesc}
+            onChange={(e) => setOcultarDesc(e.target.checked)}
+          />
+          Ocultar desconsideradas ({nDesconsideradas})
+        </label>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -134,18 +154,35 @@ export function EmissorNFsTab({
               </TableHeader>
               <TableBody>
                 {rows.map((nf) => (
-                  <TableRow key={nf.id}>
+                  <TableRow
+                    key={nf.id}
+                    className={nf.desconsiderada ? "opacity-60" : undefined}
+                  >
                     <TableCell className="font-medium">
                       <Link href={`/nf/${nf.id}`} className="hover:underline">
                         {nf.numero_nf}
                         {nf.serie ? `/${nf.serie}` : ""}
                       </Link>
+                      {nf.desconsiderada && (
+                        <Badge
+                          variant="destructive"
+                          className="ml-2 align-middle text-[10px]"
+                          title="NF desconsiderada — fora dos cálculos de produção"
+                        >
+                          ✕ Desconsiderada
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {nf.data_emissao}
                     </TableCell>
                     <TableCell>{labelProduto(nf.produto_tipo)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell
+                      className={
+                        "text-right tabular-nums" +
+                        (nf.desconsiderada ? " line-through" : "")
+                      }
+                    >
                       {fmtToneladas1(nf.quantidade_ton)}
                     </TableCell>
                   </TableRow>

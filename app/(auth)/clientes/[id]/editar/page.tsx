@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
@@ -11,6 +11,9 @@ import { getClienteById } from "@/lib/supabase/clientes";
 
 export default function EditarClientePage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const retorno = searchParams.get("retorno");
+  const voltarHref = `/clientes/${id}${retorno ? `?retorno=${encodeURIComponent(retorno)}` : ""}`;
   const { data: cliente, isLoading } = useQuery({
     queryKey: ["cliente-edit", id],
     queryFn: () => getClienteById(id),
@@ -19,7 +22,7 @@ export default function EditarClientePage() {
   return (
     <div className="space-y-4">
       <Button asChild variant="ghost" size="sm">
-        <Link href={`/clientes/${id}`}>
+        <Link href={voltarHref}>
           <ArrowLeft className="h-4 w-4" /> Voltar
         </Link>
       </Button>
@@ -32,7 +35,7 @@ export default function EditarClientePage() {
       ) : !cliente ? (
         <p className="text-sm text-muted-foreground">Cliente não encontrado.</p>
       ) : (
-        <ClienteForm cliente={cliente} />
+        <ClienteForm cliente={cliente} retorno={retorno} />
       )}
     </div>
   );

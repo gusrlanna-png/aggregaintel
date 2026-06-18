@@ -1,0 +1,19 @@
+-- 016 — spatial_ref_sys (PostGIS) — PENDENTE / não aplicável via papel `postgres`
+--
+-- O linter aponta "RLS Disabled in Public" na tabela public.spatial_ref_sys.
+-- Ela pertence ao papel `supabase_admin` (instalada pela extensão PostGIS), então
+-- o papel `postgres` (usado por migrations e SQL Editor) NÃO consegue:
+--   - ENABLE ROW LEVEL SECURITY  -> ERROR 42501 must be owner of table
+--   - REVOKE dos grants de anon/authenticated -> no-op (postgres não é o grantor)
+--
+-- Conteúdo: dados públicos de referência (sistemas de coordenadas EPSG), não-sensíveis.
+-- Risco real: baixo. Não há vazamento de dado privado; o pior caso seria um
+-- portador da anon key alterar/apagar a tabela de EPSG e atrapalhar transformações
+-- espaciais (disponibilidade/vandalismo), não exfiltração.
+--
+-- Correção definitiva: abrir ticket no Supabase Support para habilitar RLS nessa
+-- tabela de sistema (ou aceitar como limitação conhecida do PostGIS no Supabase).
+--
+-- SQL desejado (executar quando houver privilégio de owner):
+-- ALTER TABLE public.spatial_ref_sys ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY srs_read ON public.spatial_ref_sys FOR SELECT USING (true);

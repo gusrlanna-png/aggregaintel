@@ -3,8 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Pencil, Truck } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Ban, Loader2, Pencil, Truck } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getNFById } from "@/lib/supabase/nf";
+import { getNFById, toggleDesconsiderada } from "@/lib/supabase/nf";
 import { getNFUrl } from "@/lib/supabase/storage";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -23,7 +24,10 @@ import {
   fmtReaisDec,
   fmtToneladas1,
   labelProduto,
+  precoEfetivoTon,
+  temDescontoNota,
 } from "@/lib/utils/agregados";
+import { mascararCnpj } from "@/lib/utils/cnpj";
 import type { NotaFiscal } from "@/lib/supabase/types";
 
 function cifFob(v?: string | null): "CIF" | "FOB" | null {
@@ -46,6 +50,21 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export default function NFDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const qc = useQueryClient();
+  const [desconsiderando, setDesconsiderando] = React.useState(false);
+
+  async function handleDesconsiderar(valor: boolean) {
+    setDesconsiderando(true);
+    try {
+      await toggleDesconsiderada(id, valor);
+      qc.invalidateQueries({ queryKey: ["nf", id] });
+      toast.success(valor ? "NF marcada como desconsiderada." : "NF reativada nos cálculos.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar NF.");
+    } finally {
+      setDesconsiderando(false);
+    }
+  }
 
   const { data: nf, isLoading } = useQuery({
     queryKey: ["nf", id],
@@ -93,9 +112,28 @@ export default function NFDetailPage() {
           </Link>
         </Button>
         <div className="flex items-center gap-2">
-          <Badge variant={n.revisado ? "success" : "warning"}>
-            {n.revisado ? "Revisado" : "Pendente de revisão"}
-          </Badge>
+          {n.desconsiderada ? (
+            <Badge variant="destructive">Desconsiderada</Badge>
+          ) : (
+            <Badge variant={n.revisado ? "success" : "warning"}>
+              {n.revisado ? "Revisado" : "Pendente de revisão"}
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className={n.desconsiderada ? "text-emerald-600" : "text-muted-foreground"}
+            onClick={() => handleDesconsiderar(!n.desconsiderada)}
+            disabled={desconsiderando}
+            title={n.desconsiderada ? "Reativar esta NF nos cálculos" : "Desconsiderar — exclui dos cálculos"}
+          >
+            {desconsiderando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            {n.desconsiderada ? "Reativar" : "Desconsiderar"}
+          </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/nf/${n.id}/editar`}>
               <Pencil className="h-4 w-4" /> Editar
@@ -103,6 +141,13 @@ export default function NFDetailPage() {
           </Button>
         </div>
       </div>
+
+      {n.desconsiderada && (
+        <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <Ban className="h-4 w-4 shrink-0" />
+          <span>Esta NF está <strong>desconsiderada</strong> — não entra em nenhum cálculo, média ou projeção.</span>
+        </div>
+      )}
 
       <div>
         <h1 className="text-xl font-bold tracking-tight">
@@ -129,32 +174,28 @@ export default function NFDetailPage() {
                 label="Quantidade"
                 value={`${fmtToneladas1(n.quantidade_ton)} t`}
               />
-              <Row label="Valor unitário" value={fmtReais(n.valor_unitario)} />
-              <Row label="Valor total" value={fmtReais(n.valor_total)} />
-              {(() => {
-                const calc =
-                  n.quantidade_ton > 0 && (n.valor_total ?? 0) > 0
-                    ? (n.valor_total as number) / n.quantidade_ton
-                    : 0;
-                const unit = n.valor_unitario ?? 0;
-                const diverge =
-                  unit > 0 && calc > 0 && Math.abs(unit - calc) / calc > 0.05;
-                if (calc <= 0) return null;
-                return (
-                  <div
-                    className={`mt-2 rounded-md p-2 text-xs ${
-                      diverge
-                        ? "bg-destructive/10 text-destructive"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    Preço (total ÷ peso): {fmtReais(calc)}/t
-                    {diverge
-                      ? ` — diverge do valor unitário (${fmtReais(unit)}/t).`
-                      : ""}
-                  </div>
-                );
-              })()}
+              <Row
+                label="Valor unitário (destacado)"
+                value={fmtReais(n.valor_unitario)}
+              />
+              <Row label="Valor total (produtos)" value={fmtReais(n.valor_total)} />
+              <Row label="Valor da nota (líquido)" value={fmtReais(n.valor_total_nota)} />
+              <Row
+                label="Preço efetivo"
+                value={
+                  <span className="font-semibold">
+                    {fmtReais(precoEfetivoTon(n))}/t
+                  </span>
+                }
+              />
+              {temDescontoNota(n) && (
+                <div className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  <strong>Desconto em nota</strong>: valor unitário destacado{" "}
+                  {fmtReais(n.valor_unitario)}/t, mas o preço efetivo (nota ÷ peso)
+                  é <strong>{fmtReais(precoEfetivoTon(n))}/t</strong>. O efetivo é a
+                  referência usada no planejamento.
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -210,12 +251,23 @@ export default function NFDetailPage() {
                       label="R$/t/km"
                       value={rsTonKm > 0 ? fmtReaisDec(rsTonKm) : null}
                     />
+                    <Row label="Código ANTT" value={n.codigo_antt} />
                     <Row label="Transportador" value={n.transportador} />
+                    <Row label="Motorista" value={n.motorista_nome} />
+                    <Row
+                      label="CNPJ transp."
+                      value={n.transportador_doc ? mascararCnpj(n.transportador_doc) : null}
+                    />
+                    <Row label="IE transp." value={n.transportador_ie} />
                     <Row label="Placa" value={n.placa_veiculo} />
                     <Row label="UF veículo" value={n.uf_veiculo} />
                     <Row
                       label="Peso bruto"
                       value={n.peso_bruto ? `${n.peso_bruto} t` : null}
+                    />
+                    <Row
+                      label="Peso líquido"
+                      value={n.peso_liquido ? `${n.peso_liquido} t` : null}
                     />
                     <Row label="Espécie" value={n.especie_carga} />
                   </>

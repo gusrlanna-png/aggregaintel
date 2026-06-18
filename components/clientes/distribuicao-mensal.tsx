@@ -43,15 +43,18 @@ export function DistribuicaoMensal({
   mix,
   segmento,
   ano,
+  precosEfetivos,
 }: {
   consumoAnual: Record<string, number>;
   mix: MixRow[];
   segmento: string;
   ano: number;
+  precosEfetivos?: Record<string, number>;
 }) {
   const { totalTon, oportunidadeTon, oportunidadeRs } = calcOportunidade(
     consumoAnual,
-    mix
+    mix,
+    precosEfetivos
   );
 
   if (totalTon <= 0) {

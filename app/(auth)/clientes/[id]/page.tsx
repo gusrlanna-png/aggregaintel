@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, MapPin, Pencil, RotateCw, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -20,17 +20,25 @@ import {
   type MixRow,
 } from "@/components/clientes/fornecedor-mix";
 import { OportunidadeMBV } from "@/components/clientes/oportunidade-mbv";
+import { NfsCliente } from "@/components/clientes/nfs-cliente";
 import { DistribuicaoMensal } from "@/components/clientes/distribuicao-mensal";
 import {
   getClienteById,
   getClientesDoGrupo,
   atualizarCadastralCliente,
+  getSociosCliente,
+  salvarSociosCliente,
 } from "@/lib/supabase/clientes";
 import { getEmissores } from "@/lib/supabase/emissores";
 import { getVinculoPorCnpj } from "@/lib/supabase/vinculos";
 import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
 import { saveTraco, saveFornecedorMix } from "@/lib/supabase/consumo";
-import { SEGMENTOS, type Segmento } from "@/lib/utils/agregados";
+import { getNFsCliente } from "@/lib/supabase/nf";
+import {
+  SEGMENTOS,
+  precoEfetivoMedioPorTipo,
+  type Segmento,
+} from "@/lib/utils/agregados";
 
 const MapaEditavel = dynamic(
   () => import("@/components/maps/mapa-editavel").then((m) => m.MapaEditavel),
@@ -46,6 +54,11 @@ const MapaEditavel = dynamic(
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  // Origem do acesso (ex.: vindo de uma visita) — permite voltar ao ponto que parou.
+  const retorno = searchParams.get("retorno");
+  const voltarHref = retorno || "/clientes";
+  const voltarLabel = retorno ? "Voltar" : "Clientes";
   const queryClient = useQueryClient();
   const [consumo, setConsumo] = React.useState<ConsumoResult | null>(null);
   const [mix, setMix] = React.useState<MixRow[]>([]);
@@ -77,6 +90,19 @@ export default function ClienteDetailPage() {
         : Promise.resolve([]),
     enabled: Boolean(cliente?.grupo_economico),
   });
+  const { data: socios = [] } = useQuery({
+    queryKey: ["cliente-socios", id],
+    queryFn: () => getSociosCliente(id),
+  });
+  // NFs reais do cliente → preço efetivo por produto (referência do planejamento).
+  const { data: nfsCliente = [] } = useQuery({
+    queryKey: ["cliente-nfs-preco", id],
+    queryFn: () => getNFsCliente(id),
+  });
+  const precosEfetivos = React.useMemo(
+    () => precoEfetivoMedioPorTipo(nfsCliente),
+    [nfsCliente]
+  );
 
   const produtos = consumo ? Object.keys(consumo.consumo_ton) : [];
 
@@ -106,9 +132,18 @@ export default function ClienteDetailPage() {
         cep: c.cep,
         fone: c.fone,
       });
+      // Traz também o quadro societário (sócios) da Receita.
+      let nSocios = 0;
+      if (c.socios?.length) {
+        await salvarSociosCliente(id, c.socios);
+        nSocios = c.socios.filter((s) => s.nome?.trim()).length;
+      }
       await queryClient.invalidateQueries({ queryKey: ["cliente", id] });
+      await queryClient.invalidateQueries({ queryKey: ["cliente-socios", id] });
       toast.success(
-        `Dados atualizados via Receita Federal${c.situacao ? ` · ${c.situacao}` : ""}.`
+        `Dados atualizados via Receita Federal${c.situacao ? ` · ${c.situacao}` : ""}${
+          nSocios ? ` · ${nSocios} sócio(s)` : ""
+        }.`
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao atualizar dados.");
@@ -178,8 +213,8 @@ export default function ClienteDetailPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Button asChild variant="ghost" size="sm">
-          <Link href="/clientes">
-            <ArrowLeft className="h-4 w-4" /> Clientes
+          <Link href={voltarHref}>
+            <ArrowLeft className="h-4 w-4" /> {voltarLabel}
           </Link>
         </Button>
         <div className="flex items-center gap-2">
@@ -198,7 +233,7 @@ export default function ClienteDetailPage() {
             Atualizar dados
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href={`/clientes/${id}/editar`}>
+            <Link href={`/clientes/${id}/editar${retorno ? `?retorno=${encodeURIComponent(retorno)}` : ""}`}>
               <Pencil className="h-4 w-4" /> Editar
             </Link>
           </Button>
@@ -241,6 +276,7 @@ export default function ClienteDetailPage() {
               ["CPF", cliente.cpf],
               ["Segmento", seg.label],
               ["Grupo econômico", cliente.grupo_economico],
+              ["Transportadora", cliente.transportadora],
               ["Telefone", cliente.fone],
               ["Endereço", cliente.logradouro],
               ["Bairro", cliente.bairro],
@@ -346,6 +382,37 @@ export default function ClienteDetailPage() {
         </Card>
       )}
 
+      {/* Quadro societário (sócios) — trazido pelo "Atualizar dados" */}
+      {socios.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-sm font-medium">Quadro societário</p>
+            <ul className="divide-y">
+              {socios.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                  <Link
+                    href={s.pessoa_id ? `/pessoas/${s.pessoa_id}` : "#"}
+                    className={
+                      s.pessoa_id
+                        ? "min-w-0 truncate font-medium text-primary hover:underline"
+                        : "min-w-0 truncate font-medium"
+                    }
+                  >
+                    {s.nome}
+                  </Link>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {[s.qualificacao, s.faixa_etaria].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Volume real confirmado (NFs recebidas) — referência para o planejamento */}
+      <NfsCliente clienteId={id} />
+
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           1. Calculadora de traço
@@ -369,7 +436,11 @@ export default function ClienteDetailPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           3. Oportunidade MBV
         </h2>
-        <OportunidadeMBV consumo={consumo?.consumo_ton ?? {}} mix={mix} />
+        <OportunidadeMBV
+          consumo={consumo?.consumo_ton ?? {}}
+          mix={mix}
+          precosEfetivos={precosEfetivos}
+        />
       </section>
 
       <section className="space-y-2">
@@ -381,6 +452,7 @@ export default function ClienteDetailPage() {
           mix={mix}
           segmento={cliente.segmento}
           ano={anoSaz}
+          precosEfetivos={precosEfetivos}
         />
       </section>
 

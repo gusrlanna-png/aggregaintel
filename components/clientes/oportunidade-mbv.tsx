@@ -29,7 +29,10 @@ export interface OportunidadeLinha {
 
 export function calcOportunidade(
   consumo: Record<string, number>,
-  mix: MixRow[]
+  mix: MixRow[],
+  /** Preço efetivo real (R$/t) por tipo de produto vindo das NFs do cliente.
+   *  Quando há valor para o produto, usa-o; senão cai no preço tabelado. */
+  precosEfetivos?: Record<string, number>
 ): { linhas: OportunidadeLinha[]; totalTon: number; oportunidadeTon: number; oportunidadeRs: number } {
   const linhas: OportunidadeLinha[] = Object.entries(consumo).map(
     ([produto, total_ton]) => {
@@ -44,12 +47,16 @@ export function calcOportunidade(
           .reduce((s, m) => s + m.share_pct, 0) / 100;
       const mbv_ton = total_ton * Math.min(mbvPct, 1);
       const oportunidade_ton = Math.max(0, total_ton - mbv_ton);
+      const preco =
+        precosEfetivos && precosEfetivos[produto] > 0
+          ? precosEfetivos[produto]
+          : precoMedio(produto);
       return {
         produto,
         total_ton,
         mbv_ton,
         oportunidade_ton,
-        oportunidade_rs: oportunidade_ton * precoMedio(produto),
+        oportunidade_rs: oportunidade_ton * preco,
       };
     }
   );
@@ -63,14 +70,18 @@ export function calcOportunidade(
 export function OportunidadeMBV({
   consumo,
   mix,
+  precosEfetivos,
 }: {
   consumo: Record<string, number>;
   mix: MixRow[];
+  precosEfetivos?: Record<string, number>;
 }) {
   const { linhas, oportunidadeTon, oportunidadeRs } = calcOportunidade(
     consumo,
-    mix
+    mix,
+    precosEfetivos
   );
+  const temEfetivo = !!precosEfetivos && Object.keys(precosEfetivos).length > 0;
 
   if (linhas.length === 0) {
     return (
@@ -96,6 +107,9 @@ export function OportunidadeMBV({
             <p className="text-xs text-muted-foreground">Potencial de receita</p>
             <p className="mt-1 text-xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
               {fmtReais(oportunidadeRs)}/mês
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {temEfetivo ? "preço efetivo das NFs" : "preço de referência"}
             </p>
           </CardContent>
         </Card>

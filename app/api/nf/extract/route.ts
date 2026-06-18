@@ -10,6 +10,7 @@ import {
   openRouterConfig,
 } from "@/lib/ocr/openai-compatible";
 import { isOcrSpaceConfigured, ocrSpaceText } from "@/lib/ocr/ocrspace";
+import { extractNFOllamaVision, isOllamaVisionConfigured } from "@/lib/ocr/ollama-vision";
 import { parseNFText } from "@/lib/utils/nf-text-parse";
 
 export const runtime = "nodejs";
@@ -53,7 +54,8 @@ export async function POST(req: NextRequest) {
       isGeminiConfigured() ||
       isGroqConfigured() ||
       isOpenRouterConfigured() ||
-      isOcrSpaceConfigured();
+      isOcrSpaceConfigured() ||
+      isOllamaVisionConfigured();
 
     // Nenhum provedor configurado → o cliente faz OCR local (Tesseract.js).
     if (!anyConfigured) {
@@ -116,6 +118,12 @@ export async function POST(req: NextRequest) {
       const r = await tentar("ocrspace", "form", async () =>
         parseNFText(await ocrSpaceText(base64, file.type))
       );
+      if (r) return r;
+    }
+    // 4.5) Ollama visão LOCAL (grátis, VPS — ex.: qwen2.5vl) — só imagem.
+    //      Vem ANTES do Claude para evitar o provedor pago.
+    if (isImage && isOllamaVisionConfigured()) {
+      const r = await tentar("ollama", "ocr", () => extractNFOllamaVision(base64));
       if (r) return r;
     }
     // 5) Claude (PAGO — último recurso, só se todos os grátis falharam)

@@ -56,6 +56,7 @@ export interface Cliente {
   lat: number | null;
   lng: number | null;
   fone: string | null;
+  transportadora?: string | null;
   contato_nome: string | null; // legado (1 contato)
   contatos: ClienteContato[] | null; // contatos da empresa (à parte)
   grupo_economico: string | null; // vinculado por raiz de CNPJ ou manual
@@ -90,6 +91,7 @@ export interface NotaFiscal {
   quantidade_ton: number;
   valor_unitario: number | null;
   valor_total: number | null;
+  valor_total_nota: number | null;
   desconto: number | null;
   icms_base: number | null;
   icms_valor: number | null;
@@ -100,20 +102,25 @@ export interface NotaFiscal {
   pis_valor: number | null;
   cofins_valor: number | null;
   frete_por_conta: string | null;
+  codigo_antt: string | null;
   frete_valor: number | null;
   distancia_km: number | null;
   transportador: string | null;
+  transportador_doc: string | null;
+  transportador_ie: string | null;
   placa_veiculo: string | null;
   uf_veiculo: string | null;
   peso_bruto: number | null;
   peso_liquido: number | null;
   especie_carga: string | null;
+  motorista_nome: string | null;
   arquivo_url: string | null;
   ocr_raw: unknown | null;
   ocr_confianca: number | null;
   revisado: boolean | null;
   revisado_por: string | null;
   revisado_em: string | null;
+  desconsiderada: boolean | null;
   dados_adicionais: string | null;
   motorista_cpf: string | null;
   pedido_ref: string | null;

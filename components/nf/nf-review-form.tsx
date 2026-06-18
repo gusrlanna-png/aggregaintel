@@ -35,11 +35,12 @@ import {
 } from "@/components/ui/masked-input";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
 import { EmissorPicker } from "@/components/nf/emissor-picker";
+import { ClientePicker } from "@/components/nf/cliente-picker";
 import { cn } from "@/lib/utils";
 import { saveNFFromForm } from "@/lib/utils/save-nf-from-form";
 import { getEmissores } from "@/lib/supabase/emissores";
 import { isValidCNPJ, onlyDigits } from "@/lib/utils/masks";
-import type { Emissor } from "@/lib/supabase/types";
+import type { Cliente, Emissor } from "@/lib/supabase/types";
 import {
   PRODUTO_TIPOS,
   fmtReais,
@@ -171,9 +172,12 @@ export function NFReviewForm({
   nfId,
   emissorId,
   clienteId,
+  sourceFile,
 }: {
   initial: NFFormValues;
   imageUrl?: string | null;
+  /** Arquivo original (foto/PDF) — salvo no storage e vinculado à NF. */
+  sourceFile?: File | null;
   /** Quando definido, é chamado após salvar (modo fila/lote) em vez de navegar para /nf. */
   onSaved?: () => void;
   /** Persiste as edições para fora (ex.: contexto de importação em segundo plano). */
@@ -192,6 +196,10 @@ export function NFReviewForm({
     emissorId ?? null
   );
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [clienteSelId, setClienteSelId] = React.useState<string | null>(
+    clienteId ?? null
+  );
+  const [clientePickerOpen, setClientePickerOpen] = React.useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   // Verificação do CNPJ na Receita (existência + razão oficial).
   const [cnpjVerif, setCnpjVerif] = React.useState<{
@@ -258,6 +266,15 @@ export function NFReviewForm({
 
   const emissorSel = emissoresList.find((e) => e.id === emissorSelId) ?? null;
 
+  // Produtor já vinculado (ex.: edição) mas com CNPJ/UF vazios no form →
+  // preenche a partir do cadastro do produtor (e Receita se faltar UF).
+  React.useEffect(() => {
+    if (emissorSel && (!form.emissor_cnpj || !form.emissor_uf)) {
+      preencherDeEmissor(emissorSel);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emissorSel]);
+
   // Completa UF/município pela Receita quando o cadastro não tem (pós-vínculo).
   async function completarPelaReceita(cnpjMasc: string) {
     const d = onlyDigits(cnpjMasc);
@@ -289,6 +306,17 @@ export function NFReviewForm({
       emissor_uf: e.uf || f.emissor_uf,
     }));
     if (!e.uf) void completarPelaReceita(cnpj);
+  }
+
+  function vincularCliente(c: Cliente) {
+    setClienteSelId(c.id);
+    setForm((f) => ({
+      ...f,
+      cliente_nome: c.razao_social,
+      cliente_doc: c.cnpj || c.cpf || f.cliente_doc,
+      cliente_municipio: c.municipio || f.cliente_municipio,
+      cliente_uf: c.uf || f.cliente_uf,
+    }));
   }
 
   // Ao casar automaticamente, completa os campos do cadastro (CNPJ que o OCR não
@@ -414,13 +442,23 @@ export function NFReviewForm({
       const r = await saveNFFromForm(form, {
         nfId,
         emissorId: emissorSelId ?? emissorId,
-        clienteId,
+        clienteId: clienteSelId ?? clienteId,
+        arquivoFile: sourceFile,
       });
       if (r.status === "invalid") {
         toast.error(r.message ?? "Dados incompletos.");
         return;
       }
       if (r.status === "duplicate") {
+        // Se a NF já existe E está desconsiderada, reabre para o usuário decidir
+        // (editar dados ou manter/desfazer o "desconsiderar").
+        if (r.existingId && r.existingDesconsiderada) {
+          toast.warning(
+            `${r.message} e está marcada como desconsiderada. Abrindo para você revisar e decidir.`
+          );
+          router.push(`/nf/${r.existingId}`);
+          return;
+        }
         toast.error(`${r.message}. Duplicidade não permitida.`);
         return;
       }
@@ -622,8 +660,47 @@ export function NFReviewForm({
           onOpenChange={setPickerOpen}
           onSelect={vincularEmissor}
         />
+        <ClientePicker
+          open={clientePickerOpen}
+          onOpenChange={setClientePickerOpen}
+          onSelect={vincularCliente}
+        />
 
         <Section title="Destinatário (cliente)">
+          <div className="sm:col-span-2">
+            {clienteSelId ? (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm dark:border-emerald-900 dark:bg-emerald-950">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      Vinculado a {form.cliente_nome || "cliente"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">cliente já cadastrado</span>
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setClienteSelId(null)}
+                >
+                  <Unlink className="h-4 w-4" /> Desvincular
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setClientePickerOpen(true)}
+              >
+                <Search className="h-4 w-4" /> Buscar cliente cadastrado
+              </Button>
+            )}
+          </div>
           <div className="sm:col-span-2">
             <Field
               label="Nome / razão social"
@@ -693,6 +770,11 @@ export function NFReviewForm({
             value={form.valor_total}
             onChange={(v) => set("valor_total", v)}
           />
+          <MoneyField
+            label="Valor da nota — líquido (R$)"
+            value={form.valor_total_nota}
+            onChange={(v) => set("valor_total_nota", v)}
+          />
           {precoCalc > 0 && (
             <div
               className={`sm:col-span-2 rounded-md p-2 text-xs ${
@@ -752,6 +834,11 @@ export function NFReviewForm({
             label="Transportador"
             value={form.transportador}
             onChange={(v) => set("transportador", v)}
+          />
+          <Field
+            label="Motorista"
+            value={form.motorista_nome}
+            onChange={(v) => set("motorista_nome", v)}
           />
           <Field
             label="Placa do veículo"

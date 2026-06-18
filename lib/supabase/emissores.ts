@@ -153,10 +153,11 @@ export async function atualizarCadastralEmissor(
     capital_social: number | null;
     natureza_juridica: string | null;
     matriz_filial: string | null;
-  }>
+  }>,
+  client?: ReturnType<typeof createClient>
 ): Promise<void> {
-  if (!isSupabaseConfigured()) return;
-  const supabase = createClient();
+  if (!client && !isSupabaseConfigured()) return;
+  const supabase = client ?? createClient();
   const { error } = await supabase.from("emissores").update(dados).eq("id", id);
   if (error) throw error;
 }
@@ -185,10 +186,11 @@ export async function getSocios(emissorId: string): Promise<Socio[]> {
 /** Substitui o quadro societário do emissor (e garante o cadastro de Pessoa). */
 export async function salvarSocios(
   emissorId: string,
-  socios: { nome: string | null; qualificacao?: string | null; faixa_etaria?: string | null; desde?: string | null }[]
+  socios: { nome: string | null; qualificacao?: string | null; faixa_etaria?: string | null; desde?: string | null }[],
+  client?: ReturnType<typeof createClient>
 ): Promise<void> {
-  if (!isSupabaseConfigured()) return;
-  const supabase = createClient();
+  if (!client && !isSupabaseConfigured()) return;
+  const supabase = client ?? createClient();
   const limpos = socios
     .filter((s): s is typeof s & { nome: string } => Boolean(s.nome && s.nome.trim()))
     .map((s) => ({
@@ -507,4 +509,43 @@ export async function getProjecaoResumo(): Promise<
       ic: byEmissor.get(e.id)?.ic ?? 0,
     }))
     .sort((a, b) => b.volume - a.volume);
+}
+
+export interface RankingProducao {
+  emissor: Emissor;
+  volume: number;
+}
+
+/**
+ * Ranking de produtores por produção. mes=null → anual (projeção total);
+ * mes=1..12 → produção daquele mês (a partir dos volumes mensais salvos).
+ * Retorna os top `limite`.
+ */
+export async function getRankingProducao(
+  ano: number,
+  mes: number | null,
+  limite = 20
+): Promise<RankingProducao[]> {
+  if (!isSupabaseConfigured()) return [];
+  if (!mes) {
+    const r = await getProjecaoResumo();
+    return r.filter((x) => x.volume > 0).map((x) => ({ emissor: x.emissor, volume: x.volume })).slice(0, limite);
+  }
+  const supabase = createClient();
+  const { data: rows } = await supabase
+    .from("projecao_mensal")
+    .select("emissor_id, volumes")
+    .eq("ano", ano);
+  const byEmissor = new Map<string, number>();
+  for (const row of rows ?? []) {
+    const vol = (row.volumes as Record<string, number> | null)?.[String(mes)] ?? 0;
+    if (vol) byEmissor.set(row.emissor_id, (byEmissor.get(row.emissor_id) ?? 0) + Number(vol));
+  }
+  const ids = Array.from(byEmissor.keys());
+  if (ids.length === 0) return [];
+  const { data: ems } = await supabase.from("emissores").select("*").in("id", ids);
+  return ((ems ?? []) as Emissor[])
+    .map((e) => ({ emissor: e, volume: byEmissor.get(e.id) ?? 0 }))
+    .sort((a, b) => b.volume - a.volume)
+    .slice(0, limite);
 }

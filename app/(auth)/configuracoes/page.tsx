@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import {
+  Bot,
   Briefcase,
   CalendarDays,
   ChevronRight,
+  Code2,
   Database,
   Gift,
+  Merge,
   Package,
   ShieldCheck,
   SlidersHorizontal,
+  Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -59,6 +63,20 @@ const ITENS: ConfigItem[] = [
       "Perfis de acesso (admin, gestor, vendedor). Define o que cada pessoa enxerga. Apenas administradores.",
   },
   {
+    href: "/configuracoes/agentes",
+    icon: Bot,
+    titulo: "Agentes e monitoramento",
+    descricao:
+      "Agentes automáticos (enriquecimento, cascata, importação). Ative/desative, defina regras e acompanhe o log de todas as ações executadas.",
+  },
+  {
+    href: "/configuracoes/desenvolvimento",
+    icon: Code2,
+    titulo: "Desenvolvimento",
+    descricao:
+      "Peça melhorias/correções: a IA gera análise crítica + plano. Aprove e o item entra no backlog de desenvolvimento. Também pelo chat 🤖.",
+  },
+  {
     href: "/configuracoes/carteiras",
     icon: Briefcase,
     titulo: "Carteiras de vendas",
@@ -71,6 +89,20 @@ const ITENS: ConfigItem[] = [
     titulo: "Brindes",
     descricao:
       "Catálogo e estoque de brindes. A baixa acontece na entrega durante a visita (categoria Entrega de brindes).",
+  },
+  {
+    href: "/configuracoes/contatos-m365",
+    icon: Users,
+    titulo: "Contatos Microsoft 365",
+    descricao:
+      "Sincronize seus contatos do Outlook para o sistema. Requer login com conta Microsoft corporativa.",
+  },
+  {
+    href: "/configuracoes/clientes-duplicados",
+    icon: Merge,
+    titulo: "Clientes duplicados",
+    descricao:
+      "Encontra cadastros de cliente repetidos pelo mesmo CNPJ e mescla num único registro, movendo NFs, visitas e contatos.",
   },
 ];
 

@@ -17,8 +17,14 @@ export const ROTAS_VENDEDOR = [
 
 export function podeAcessar(perfil: Perfil | null, pathname: string): boolean {
   if (perfil === "admin" || perfil === "gestor") return true;
-  // vendedor (ou perfil desconhecido) → allowlist restrita
-  return ROTAS_VENDEDOR.some(
-    (r) => pathname === r || pathname.startsWith(r + "/")
-  );
+  // Apenas o perfil "vendedor" confirmado fica restrito à allowlist.
+  if (perfil === "vendedor") {
+    return ROTAS_VENDEDOR.some(
+      (r) => pathname === r || pathname.startsWith(r + "/")
+    );
+  }
+  // Perfil indeterminado (ex.: meu_perfil() falhou transitoriamente): NÃO
+  // derruba o usuário autenticado para o dashboard — os dados seguem
+  // protegidos por RLS. Evita o bounce indevido de admins em /configuracoes/*.
+  return true;
 }

@@ -1,6 +1,9 @@
 import { DuplicateNFError, saveNF, updateNF } from "@/lib/supabase/nf";
 import { findOrCreateEmissor } from "@/lib/supabase/emissores";
 import { findOrCreateCliente } from "@/lib/supabase/clientes";
+import { uploadNF } from "@/lib/supabase/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { compressImageForStorage } from "./image-compress";
 import { isValidCNPJ } from "./masks";
 import type { NFFormValues } from "./ocr-map";
 
@@ -14,6 +17,9 @@ export type SaveNFStatus =
 export interface SaveNFResult {
   status: SaveNFStatus;
   message?: string;
+  /** Em caso de duplicidade: id e estado da NF já cadastrada. */
+  existingId?: string;
+  existingDesconsiderada?: boolean;
 }
 
 export function validarNF(form: NFFormValues): string | null {
@@ -36,6 +42,8 @@ export async function saveNFFromForm(
     nfId?: string;
     emissorId?: string | null;
     clienteId?: string | null;
+    /** Arquivo original (foto/PDF) da NF — salvo no storage para consulta. */
+    arquivoFile?: File | null;
   } = {}
 ): Promise<SaveNFResult> {
   const err = validarNF(form);
@@ -99,18 +107,23 @@ export async function saveNFFromForm(
       quantidade_ton: Number(form.quantidade_ton),
       valor_unitario: form.valor_unitario ? Number(form.valor_unitario) : null,
       valor_total: form.valor_total ? Number(form.valor_total) : null,
+      valor_total_nota: form.valor_total_nota ? Number(form.valor_total_nota) : null,
       icms_valor: form.icms_valor ? Number(form.icms_valor) : 0,
       icms_isento: form.icms_isento,
       icms_fundamento: form.icms_fundamento || null,
       frete_por_conta: form.frete_por_conta || null,
+      codigo_antt: form.codigo_antt || null,
       frete_valor: form.frete_valor ? Number(form.frete_valor) : 0,
       distancia_km: form.distancia_km ? Number(form.distancia_km) : null,
       transportador: form.transportador || null,
+      transportador_doc: form.transportador_doc || null,
+      transportador_ie: form.transportador_ie || null,
       placa_veiculo: form.placa_veiculo || null,
       uf_veiculo: form.uf_veiculo || null,
       peso_bruto: form.peso_bruto ? Number(form.peso_bruto) : null,
       peso_liquido: form.peso_liquido ? Number(form.peso_liquido) : null,
       especie_carga: form.especie_carga || null,
+      motorista_nome: form.motorista_nome || null,
       dados_adicionais: form.dados_adicionais || null,
       ocr_confianca: form.ocr_confianca,
       revisado: true,
@@ -118,20 +131,40 @@ export async function saveNFFromForm(
 
     if (opts.nfId) {
       await updateNF(opts.nfId, payload);
+      await anexarArquivo(opts.nfId, opts.arquivoFile);
       return { status: "updated" };
     }
-    await saveNF(payload);
+    const nf = await saveNF(payload);
+    await anexarArquivo(nf.id, opts.arquivoFile);
     return { status: "saved" };
   } catch (e) {
     if (e instanceof DuplicateNFError) {
       return {
         status: "duplicate",
         message: `NF ${e.existing.numero_nf} já cadastrada`,
+        existingId: e.existing.id,
+        existingDesconsiderada: Boolean(e.existing.desconsiderada),
       };
     }
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Erro ao salvar.",
     };
+  }
+}
+
+/**
+ * Comprime e envia o arquivo da NF ao storage, gravando o caminho em
+ * `arquivo_url`. Tolerante a falhas: se o upload falhar, a NF já está salva e
+ * apenas a imagem deixa de ser anexada (não interrompe o fluxo).
+ */
+async function anexarArquivo(nfId: string, file?: File | null): Promise<void> {
+  if (!file || !isSupabaseConfigured()) return;
+  try {
+    const comprimido = await compressImageForStorage(file);
+    const path = await uploadNF(comprimido, nfId);
+    await updateNF(nfId, { arquivo_url: path });
+  } catch {
+    // imagem é complementar — não falha o salvamento da NF
   }
 }

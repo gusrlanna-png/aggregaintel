@@ -38,11 +38,17 @@ export interface NFFormValues {
   icms_valor: string;
   icms_isento: boolean;
   icms_fundamento: string;
+  // Nota (líquido)
+  valor_total_nota: string;
   // Transporte
   frete_por_conta: string;
+  codigo_antt: string;
   frete_valor: string;
   distancia_km: string;
   transportador: string;
+  transportador_doc: string;
+  transportador_ie: string;
+  motorista_nome: string;
   placa_veiculo: string;
   uf_veiculo: string;
   peso_bruto: string;
@@ -135,12 +141,17 @@ export function ocrToForm(ocr: OCRResult): NFFormValues {
     icms_valor: s(ocr.impostos?.icms_valor),
     icms_isento: Boolean(ocr.impostos?.icms_isento),
     icms_fundamento: s(ocr.impostos?.icms_fundamento),
+    valor_total_nota: s(ocr.valor_total_nota),
     frete_por_conta: s(ocr.transporte?.frete_por_conta),
+    codigo_antt: s(ocr.transporte?.codigo_antt),
     frete_valor: s(ocr.transporte?.frete_valor),
     distancia_km: "",
     transportador:
       s(ocr.transporte?.transportador_nome) ||
       (motoristaTexto ? `Motorista: ${motoristaTexto}` : ""),
+    transportador_doc: s(ocr.transporte?.transportador_cnpj),
+    transportador_ie: s(ocr.transporte?.transportador_ie),
+    motorista_nome: s(ocr.transporte?.motorista_nome) || motoristaTexto,
     placa_veiculo: s(ocr.transporte?.placa_veiculo) || placaTexto,
     uf_veiculo: s(ocr.transporte?.uf_veiculo),
     peso_bruto: s(ocr.transporte?.peso_bruto_ton),
@@ -160,6 +171,7 @@ export function emptyForm(): NFFormValues {
     produto: {},
     impostos: {},
     transporte: {},
+    valor_total_nota: null,
     dados_adicionais: null,
     motorista_cpf: null,
     pedido_ref: null,
@@ -203,10 +215,15 @@ export function nfToForm(nf: import("@/lib/supabase/types").NotaFiscal): NFFormV
     icms_valor: ns(nf.icms_valor),
     icms_isento: Boolean(nf.icms_isento),
     icms_fundamento: ns(nf.icms_fundamento),
+    valor_total_nota: ns(nf.valor_total_nota),
     frete_por_conta: ns(nf.frete_por_conta),
+    codigo_antt: ns(nf.codigo_antt),
     frete_valor: ns(nf.frete_valor),
     distancia_km: ns(nf.distancia_km),
     transportador: ns(nf.transportador),
+    transportador_doc: ns(nf.transportador_doc),
+    transportador_ie: ns(nf.transportador_ie),
+    motorista_nome: ns(nf.motorista_nome),
     placa_veiculo: ns(nf.placa_veiculo),
     uf_veiculo: ns(nf.uf_veiculo),
     peso_bruto: ns(nf.peso_bruto),

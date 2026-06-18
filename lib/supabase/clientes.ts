@@ -72,6 +72,105 @@ export async function atualizarCadastralCliente(
   if (error) throw error;
 }
 
+export interface ClienteDup {
+  id: string;
+  razao_social: string;
+  fantasia: string | null;
+  cnpj: string | null;
+  municipio: string | null;
+  uf: string | null;
+  status: string | null;
+  atualizado_em: string | null;
+}
+
+export interface GrupoDuplicado {
+  cnpj_digitos: string;
+  membros: ClienteDup[];
+}
+
+/** Agrupa clientes que compartilham o mesmo CNPJ (candidatos a mesclagem). */
+export async function getClientesDuplicados(): Promise<GrupoDuplicado[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("id, razao_social, fantasia, cnpj, municipio, uf, status, atualizado_em")
+    .not("cnpj", "is", null)
+    .limit(5000);
+  if (error) throw error;
+  const grupos = new Map<string, ClienteDup[]>();
+  for (const c of (data as ClienteDup[]) ?? []) {
+    const dig = (c.cnpj ?? "").replace(/\D/g, "");
+    if (dig.length < 8) continue;
+    if (!grupos.has(dig)) grupos.set(dig, []);
+    grupos.get(dig)!.push(c);
+  }
+  return [...grupos.entries()]
+    .filter(([, m]) => m.length > 1)
+    .map(([cnpj_digitos, membros]) => ({
+      cnpj_digitos,
+      membros: membros.sort((a, b) =>
+        (b.atualizado_em ?? "").localeCompare(a.atualizado_em ?? "")
+      ),
+    }))
+    .sort((a, b) => b.membros.length - a.membros.length);
+}
+
+/** Mescla os duplicados no cliente mestre (RPC mesclar_clientes). */
+export async function mesclarClientes(masterId: string, dupIds: string[]): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = createClient();
+  const { error } = await supabase.rpc("mesclar_clientes", {
+    p_master: masterId,
+    p_dups: dupIds,
+  });
+  if (error) throw error;
+}
+
+export interface SocioCliente {
+  id: string;
+  nome: string;
+  qualificacao: string | null;
+  faixa_etaria: string | null;
+  desde: string | null;
+  pessoa_id: string | null;
+}
+
+/** Quadro societário do cliente (mesma tabela `socios`, via cliente_id). */
+export async function getSociosCliente(clienteId: string): Promise<SocioCliente[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("socios")
+    .select("id, nome, qualificacao, faixa_etaria, desde, pessoa_id")
+    .eq("cliente_id", clienteId)
+    .order("nome");
+  if (error) throw error;
+  return (data as SocioCliente[]) ?? [];
+}
+
+/** Substitui o quadro societário do cliente (RPC sincronizar_socios_cliente). */
+export async function salvarSociosCliente(
+  clienteId: string,
+  socios: { nome: string | null; qualificacao?: string | null; faixa_etaria?: string | null; desde?: string | null }[]
+): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = createClient();
+  const limpos = socios
+    .filter((s): s is typeof s & { nome: string } => Boolean(s.nome && s.nome.trim()))
+    .map((s) => ({
+      nome: s.nome.trim(),
+      qualificacao: s.qualificacao ?? null,
+      faixa_etaria: s.faixa_etaria ?? null,
+      desde: s.desde || null,
+    }));
+  const { error } = await supabase.rpc("sincronizar_socios_cliente", {
+    p_cliente: clienteId,
+    p_socios: limpos,
+  });
+  if (error) throw error;
+}
+
 export async function getClienteById(id: string): Promise<Cliente | null> {
   if (!isSupabaseConfigured()) {
     return localGet<Cliente>("clientes", id);

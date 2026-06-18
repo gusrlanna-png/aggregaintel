@@ -54,6 +54,30 @@ export default function LoginPage() {
     }
   }
 
+  async function handleMicrosoft() {
+    if (demo) {
+      window.location.href = "/dashboard";
+      return;
+    }
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "azure",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: "email profile openid offline_access User.Read",
+        },
+      });
+      if (error) throw error;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao conectar com Microsoft."
+      );
+      setLoading(false);
+    }
+  }
+
   async function handleMagicLink() {
     if (demo) {
       window.location.href = "/dashboard";
@@ -176,6 +200,29 @@ export default function LoginPage() {
                 onClick={handleMagicLink}
               >
                 Entrar por link mágico
+              </Button>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">ou</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={loading}
+                onClick={handleMicrosoft}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 21 21">
+                  <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                  <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                  <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                </svg>
+                Entrar com Microsoft 365
               </Button>
             </form>
           )}

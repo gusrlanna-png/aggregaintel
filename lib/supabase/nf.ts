@@ -16,6 +16,7 @@ export interface NFFilters {
   data_inicio?: string;
   data_fim?: string;
   revisado?: boolean;
+  excluirDesconsideradas?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -66,6 +67,8 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
       rows = rows.filter((n) => n.data_emissao <= filters.data_fim!);
     if (filters.revisado !== undefined)
       rows = rows.filter((n) => Boolean(n.revisado) === filters.revisado);
+    if (filters.excluirDesconsideradas)
+      rows = rows.filter((n) => !n.desconsiderada);
     rows.sort((a, b) => (a.data_emissao < b.data_emissao ? 1 : -1));
     return { data: rows, count: rows.length };
   }
@@ -87,10 +90,37 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
   if (filters.data_fim) query = query.lte("data_emissao", filters.data_fim);
   if (filters.revisado !== undefined)
     query = query.eq("revisado", filters.revisado);
+  if (filters.excluirDesconsideradas)
+    query = query.not("desconsiderada", "eq", true);
 
   const { data, error, count } = await query;
   if (error) throw error;
   return { data: (data ?? []) as NotaFiscal[], count: count ?? 0 };
+}
+
+/**
+ * NFs em que o cliente é o destinatário — histórico/volume CONFIRMADO (real).
+ * Exclui NFs desconsideradas. Serve de fonte verdadeira para o planejamento.
+ */
+export async function getNFsCliente(clienteId: string): Promise<NotaFiscal[]> {
+  if (!clienteId) return [];
+  if (!isSupabaseConfigured()) {
+    return localList<NotaFiscal>("notas_fiscais")
+      .filter((n) => n.cliente_id === clienteId && !n.desconsiderada)
+      .map(hydrate)
+      .sort((a, b) => (a.data_emissao < b.data_emissao ? 1 : -1));
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("notas_fiscais")
+    .select(
+      "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)"
+    )
+    .eq("cliente_id", clienteId)
+    .not("desconsiderada", "eq", true)
+    .order("data_emissao", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as NotaFiscal[];
 }
 
 export async function getNFById(id: string): Promise<NotaFiscal | null> {
@@ -331,6 +361,20 @@ export async function searchNFs(
     .order("data_emissao", { ascending: false })
     .limit(limite);
   return (data ?? []) as NotaFiscal[];
+}
+
+/** Marca (ou desmarca) uma NF como desconsiderada — excluída de todos os cálculos. */
+export async function toggleDesconsiderada(id: string, valor: boolean): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    localUpdate<NotaFiscal>("notas_fiscais", id, { desconsiderada: valor });
+    return;
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("notas_fiscais")
+    .update({ desconsiderada: valor })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export async function countNFsMesAtual(): Promise<number> {

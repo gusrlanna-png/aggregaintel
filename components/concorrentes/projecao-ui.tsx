@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2, RotateCcw, Save, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,7 +62,7 @@ function dataLocal(s: string): Date {
 
 interface SerieGroup {
   serie: string;
-  nfs: { numero: number; data: Date; quantidade_ton: number }[];
+  nfs: { id: string; numero: number; data: Date; quantidade_ton: number }[];
 }
 
 export function ProjecaoUI({
@@ -71,12 +72,14 @@ export function ProjecaoUI({
   emissorId: string;
   nfs: NotaFiscal[];
 }) {
+  const router = useRouter();
   const series: SerieGroup[] = React.useMemo(() => {
     const map = new Map<string, SerieGroup>();
     for (const nf of nfs) {
       const key = nf.serie ?? "—";
       if (!map.has(key)) map.set(key, { serie: key, nfs: [] });
       map.get(key)!.nfs.push({
+        id: nf.id,
         numero: nf.numero_nf,
         data: dataLocal(nf.data_emissao),
         quantidade_ton: nf.quantidade_ton,
@@ -102,25 +105,31 @@ export function ProjecaoUI({
     setPeso(Number(pesoSugerido.toFixed(1)));
   }, [pesoSugerido]);
 
-  const proj = grupo
-    ? calcProjecao({ nfs: grupo.nfs, peso_medio_override: peso })
-    : null;
-
   const [granularidade, setGranularidade] =
     React.useState<Granularidade>("mensal");
 
-  // Filtro por ano: padrão = ano do fim do período observado; pode ser trocado.
+  // Ano-alvo: padrão = ano mais recente com NFs. Os anos disponíveis são os que
+  // realmente têm notas capturadas (não inventa anos vazios).
   const [anoManual, setAnoManual] = React.useState<number | null>(null);
-  const anoBase = proj ? proj.periodo_fim.getFullYear() : 2026;
-  const anoAlvo = anoManual ?? anoBase;
-  const serieKey = grupo?.serie === "—" ? "" : grupo?.serie ?? "";
-
   const anosDisponiveis = React.useMemo(() => {
     const set = new Set<number>();
     for (const n of grupo?.nfs ?? []) set.add(n.data.getFullYear());
-    for (let y = anoBase - 1; y <= anoBase + 2; y++) set.add(y);
     return Array.from(set).sort((a, b) => b - a);
-  }, [grupo, anoBase]);
+  }, [grupo]);
+  const anoBase = anosDisponiveis[0] ?? new Date().getFullYear();
+  const anoAlvo = anoManual ?? anoBase;
+  const serieKey = grupo?.serie === "—" ? "" : grupo?.serie ?? "";
+
+  // Projeção POR ANO: usa só as NFs do ano selecionado, de modo que o quadro
+  // (anual, mín/est/máx, NF inicial/final, gap) reflita aquele período.
+  const nfsAno = React.useMemo(
+    () => (grupo?.nfs ?? []).filter((n) => n.data.getFullYear() === anoAlvo),
+    [grupo, anoAlvo]
+  );
+  const proj =
+    nfsAno.length >= 2
+      ? calcProjecao({ nfs: nfsAno, peso_medio_override: peso })
+      : null;
 
   const sazonal = proj
     ? projetarSazonal({
@@ -289,6 +298,7 @@ export function ProjecaoUI({
     .map((n) => ({
       x: n.data.getTime(),
       y: n.numero,
+      id: n.id,
       label: n.data.toLocaleDateString("pt-BR"),
     }));
 
@@ -350,27 +360,41 @@ export function ProjecaoUI({
         </CardContent>
       </Card>
 
+      {/* Seletor de ano sempre visível (mesmo quando o ano não tem projeção) */}
+      {anosDisponiveis.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label className="text-xs">Ano</Label>
+          <Select value={String(anoAlvo)} onValueChange={(v) => setAnoManual(Number(v))}>
+            <SelectTrigger className="h-8 w-[6rem] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {anosDisponiveis.map((a) => (
+                <SelectItem key={a} value={String(a)}>
+                  {a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            {nfsAno.length} NF(s) em {anoAlvo}
+          </span>
+        </div>
+      )}
+
+      {!proj && (
+        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          Sem NFs suficientes em <strong>{anoAlvo}</strong> para projetar (mínimo
+          2 no ano). Selecione outro ano no seletor acima.
+        </p>
+      )}
+
       {sazonal && (
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-sm font-semibold">Projeção</Label>
               <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={String(anoAlvo)}
-                  onValueChange={(v) => setAnoManual(Number(v))}
-                >
-                  <SelectTrigger className="h-8 w-[5.5rem] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {anosDisponiveis.map((a) => (
-                      <SelectItem key={a} value={String(a)}>
-                        {a}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Select
                   value={granularidade}
                   onValueChange={(v) => setGranularidade(v as Granularidade)}
@@ -617,6 +641,9 @@ export function ProjecaoUI({
               <p className="mb-2 text-sm font-medium">
                 Evolução da numeração de NF
               </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Clique num ponto para abrir e editar a NF.
+              </p>
               <ResponsiveContainer width="100%" height={200}>
                 <ScatterChart
                   margin={{ top: 8, right: 12, left: 8, bottom: 0 }}
@@ -648,7 +675,16 @@ export function ProjecaoUI({
                       new Date(Number(t)).toLocaleDateString("pt-BR")
                     }
                   />
-                  <Scatter data={scatterData} fill={COR_PRIMARIA} line />
+                  <Scatter
+                    data={scatterData}
+                    fill={COR_PRIMARIA}
+                    line
+                    cursor="pointer"
+                    onClick={(p) => {
+                      const id = (p?.payload as { id?: string } | undefined)?.id;
+                      if (id) router.push(`/nf/${id}`);
+                    }}
+                  />
                 </ScatterChart>
               </ResponsiveContainer>
             </CardContent>

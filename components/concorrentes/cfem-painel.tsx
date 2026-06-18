@@ -3,6 +3,15 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import {
+  CartesianGrid,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +31,7 @@ import {
   getPrecoMercado,
   getTitulosMinerarios,
 } from "@/lib/supabase/cfem";
-import { fmtNumero, fmtReais } from "@/lib/utils/agregados";
+import { COR_PRIMARIA, fmtNumero, fmtReais } from "@/lib/utils/agregados";
 import { MESES_LABEL } from "@/lib/utils/sazonalidade";
 
 const fmtK = (n: number) =>
@@ -151,6 +160,21 @@ export function CfemPainel({ cnpj }: { cnpj?: string | null }) {
 
   const totFat = linhas.reduce((s, r) => s + r.faturamento, 0);
   const totTon = preco > 0 ? Math.round(totFat / preco) : null;
+
+  // Série de toneladas/mês (ascendente) para o gráfico — mesmo estilo do de NFs.
+  const chartTon = React.useMemo(
+    () =>
+      linhas
+        .filter((r) => r.toneladas != null)
+        .slice()
+        .sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+        .map((r) => ({
+          x: new Date(r.ano, r.mes - 1, 1).getTime(),
+          y: r.toneladas as number,
+          label: `${MESES_LABEL[r.mes - 1]}/${r.ano}`,
+        })),
+    [linhas]
+  );
 
   if (loadingT || loadingP) {
     return (
@@ -354,6 +378,48 @@ export function CfemPainel({ cnpj }: { cnpj?: string | null }) {
                 </tbody>
               </table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Evolução de toneladas/mês (via CFEM) — mesmo estilo do gráfico de NFs */}
+      {chartTon.length >= 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Toneladas estimadas por mês (via CFEM)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <ResponsiveContainer width="100%" height={200}>
+              <ScatterChart margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  tickFormatter={(t) =>
+                    new Date(t).toLocaleDateString("pt-BR", {
+                      month: "short",
+                      year: "2-digit",
+                    })
+                  }
+                  fontSize={11}
+                />
+                <YAxis
+                  dataKey="y"
+                  type="number"
+                  tickFormatter={(v) => fmtNumero(v)}
+                  fontSize={11}
+                  width={70}
+                />
+                <Tooltip
+                  formatter={(v) => `${fmtNumero(Number(v))} t`}
+                  labelFormatter={(t) =>
+                    new Date(Number(t)).toLocaleDateString("pt-BR")
+                  }
+                />
+                <Scatter data={chartTon} fill={COR_PRIMARIA} line />
+              </ScatterChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       )}

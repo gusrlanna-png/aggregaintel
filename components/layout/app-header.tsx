@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/search/global-search";
 import { InstallButton } from "@/components/pwa/install-button";
+import { Ms365Status } from "@/components/ms365/ms365-status";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -36,6 +37,7 @@ export function AppHeader() {
         <div className="flex items-center gap-1">
           <InstallButton />
           <GlobalSearch variant="header" />
+          <Ms365Status />
           {demo && (
             <Badge variant="warning" className="hidden sm:inline-flex">
               Modo demonstração

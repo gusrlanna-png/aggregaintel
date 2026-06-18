@@ -4,10 +4,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { emptyForm, ocrToForm, type NFFormValues } from "@/lib/utils/ocr-map";
+import { emptyForm, nfToForm, ocrToForm, type NFFormValues } from "@/lib/utils/ocr-map";
 import { parseNFText } from "@/lib/utils/nf-text-parse";
 import { getEmissores } from "@/lib/supabase/emissores";
-import { findDuplicateNF } from "@/lib/supabase/nf";
+import { findDuplicateNF, getNFById } from "@/lib/supabase/nf";
 import type { Emissor } from "@/lib/supabase/types";
 import { isValidCNPJ, onlyDigits } from "@/lib/utils/masks";
 
@@ -17,6 +17,9 @@ export interface QueueItem {
   isPdf: boolean;
   form: NFFormValues;
   provider: string;
+  /** Quando preenchido, a revisão ATUALIZA esta NF existente (re-importação
+   *  para completar dados/foto que faltavam) em vez de criar uma nova. */
+  nfId?: string;
 }
 
 export const PROVIDER_LABEL: Record<string, string> = {
@@ -25,6 +28,7 @@ export const PROVIDER_LABEL: Record<string, string> = {
   groq: "Groq",
   openrouter: "OpenRouter",
   ocrspace: "OCR.space",
+  ollama: "Qwen local",
   ia: "IA",
   local: "OCR local",
   manual: "manual",
@@ -182,6 +186,7 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     let okLocal = 0;
     let manual = 0;
     let jaMigradas = 0;
+    let reabertas = 0;
     let cnpjVerificados = 0;
     let cnpjRemovidos = 0;
     // Produtores cadastrados — para casar o emissor e detectar NFs já migradas.
@@ -292,6 +297,37 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
             chave_acesso: chaveNF || null,
           });
           if (dup) {
+            // Se a NF já existe mas está INCOMPLETA (sem foto ou faltando
+            // dados de transporte), reabre para completar — em vez de descartar.
+            const incompleta =
+              !dup.arquivo_url ||
+              dup.peso_bruto == null ||
+              dup.peso_liquido == null ||
+              !dup.codigo_antt;
+            if (incompleta) {
+              // Usa o registro COMPLETO (com joins de cliente/emissor) como base,
+              // para NÃO sobrescrever o cliente já vinculado com uma nova leitura.
+              const completo = (await getNFById(dup.id).catch(() => null)) ?? dup;
+              const base = nfToForm(completo);
+              const merged: NFFormValues = { ...form };
+              const m = merged as unknown as Record<string, unknown>;
+              const b = base as unknown as Record<string, unknown>;
+              for (const k of Object.keys(b)) {
+                const bv = b[k];
+                if (typeof bv === "string" && bv.trim()) m[k] = bv; // existente preenchido vence; lacunas vêm da nova leitura
+              }
+              result.push({
+                file,
+                previewUrl: previews[i],
+                isPdf,
+                form: merged,
+                provider,
+                nfId: dup.id,
+              });
+              reabertas++;
+              setProgress({ done: i + 1, total: files.length });
+              continue;
+            }
             jaMigradas++;
             setProgress({ done: i + 1, total: files.length });
             continue;
@@ -331,6 +367,7 @@ export function ImportProvider({ children }: { children: React.ReactNode }) {
     if (okIA) partes.push(`${okIA} por IA`);
     if (okLocal) partes.push(`${okLocal} por OCR local`);
     if (manual) partes.push(`${manual} p/ preencher`);
+    if (reabertas) partes.push(`${reabertas} reaberta(s) p/ completar`);
     if (jaMigradas) partes.push(`${jaMigradas} já migrada(s) descartada(s)`);
     if (cnpjRemovidos)
       partes.push(`${cnpjRemovidos} CNPJ inválido(s) removido(s)`);

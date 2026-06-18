@@ -134,6 +134,83 @@ const fmtBRL = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 0,
 });
 
+/**
+ * Preço EFETIVO por tonelada = valor líquido da nota ÷ quantidade. Reflete o
+ * desconto em nota aplicado pelo fornecedor — é a referência real de preço.
+ * Fallback: total dos produtos ÷ qtd; depois o valor unitário destacado.
+ */
+export function precoEfetivoTon(nf: {
+  valor_total_nota?: number | null;
+  valor_total?: number | null;
+  valor_unitario?: number | null;
+  quantidade_ton?: number | null;
+}): number {
+  const qt = nf.quantidade_ton ?? 0;
+  if ((nf.valor_total_nota ?? 0) > 0 && qt > 0) return (nf.valor_total_nota as number) / qt;
+  if ((nf.valor_total ?? 0) > 0 && qt > 0) return (nf.valor_total as number) / qt;
+  return nf.valor_unitario ?? 0;
+}
+
+/**
+ * Preço efetivo médio (R$/t) POR TIPO de produto, ponderado pelo volume, a
+ * partir de NFs reais — reflete o preço negociado (com desconto em nota).
+ * Usado como referência de receita no planejamento, no lugar do preço tabelado.
+ */
+export function precoEfetivoMedioPorTipo(
+  nfs: {
+    produto_tipo?: string | null;
+    quantidade_ton?: number | null;
+    valor_total_nota?: number | null;
+    valor_total?: number | null;
+    valor_unitario?: number | null;
+  }[]
+): Record<string, number> {
+  const acc: Record<string, { rs: number; ton: number }> = {};
+  for (const nf of nfs) {
+    const tipo = nf.produto_tipo ?? "";
+    const ton = nf.quantidade_ton ?? 0;
+    const preco = precoEfetivoTon(nf);
+    if (!tipo || ton <= 0 || preco <= 0) continue;
+    if (!acc[tipo]) acc[tipo] = { rs: 0, ton: 0 };
+    acc[tipo].rs += preco * ton;
+    acc[tipo].ton += ton;
+  }
+  const out: Record<string, number> = {};
+  for (const [tipo, v] of Object.entries(acc)) if (v.ton > 0) out[tipo] = v.rs / v.ton;
+  return out;
+}
+
+/** Preço efetivo médio geral (R$/t) ponderado pelo volume de todas as NFs. */
+export function precoEfetivoMedioGeral(
+  nfs: {
+    quantidade_ton?: number | null;
+    valor_total_nota?: number | null;
+    valor_total?: number | null;
+    valor_unitario?: number | null;
+  }[]
+): number {
+  let rs = 0;
+  let ton = 0;
+  for (const nf of nfs) {
+    const t = nf.quantidade_ton ?? 0;
+    const p = precoEfetivoTon(nf);
+    if (t <= 0 || p <= 0) continue;
+    rs += p * t;
+    ton += t;
+  }
+  return ton > 0 ? rs / ton : 0;
+}
+
+/** Houve desconto em nota? (valor líquido < total dos produtos, com folga). */
+export function temDescontoNota(nf: {
+  valor_total_nota?: number | null;
+  valor_total?: number | null;
+}): boolean {
+  const liq = nf.valor_total_nota ?? 0;
+  const prod = nf.valor_total ?? 0;
+  return liq > 0 && prod > 0 && prod - liq > Math.max(1, prod * 0.01);
+}
+
 export function fmtTon(v?: number | null): string {
   if (v == null || Number.isNaN(v)) return "—";
   return `${fmtNum.format(v)} t`;

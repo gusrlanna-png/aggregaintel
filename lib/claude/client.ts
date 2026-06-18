@@ -28,6 +28,9 @@ REGRAS IMPORTANTES:
 - "nf.numero": número da NF (campo "Nº"/"NÚMERO"). Inclua exatamente como impresso.
 - "nf.hora_saida": a HORA DA SAÍDA/ENTRADA da mercadoria (fica ao lado de "DATA DA SAÍDA/ENTRADA"). NÃO use a hora de emissão — são campos diferentes; se houver as duas, priorize a de saída.
 - "produto.quantidade_ton": quantidade em TONELADAS (se vier em kg, converta dividindo por 1000).
+- "produto.valor_total": VALOR TOTAL DOS PRODUTOS (somatório dos itens, antes de desconto).
+- "valor_total_nota": VALOR TOTAL DA NF / VALOR TOTAL DA NOTA (o líquido a pagar). Pode ser MENOR que o total dos produtos quando há desconto em nota — capture exatamente como impresso.
+- "transporte.motorista_nome": nome do motorista (procure também nas Observações/Dados adicionais).
 - Valores numéricos no formato brasileiro (1.234,56) devem ser retornados como número (1234.56).
 - Datas (data_emissao etc.): retorne no formato AAAA-MM-DD.
 
@@ -82,14 +85,19 @@ REGRAS IMPORTANTES:
   },
   "transporte": {
     "frete_por_conta": null,
+    "codigo_antt": null,
     "frete_valor": null,
     "transportador_nome": null,
+    "transportador_cnpj": null,
+    "transportador_ie": null,
+    "motorista_nome": null,
     "placa_veiculo": null,
     "uf_veiculo": null,
     "peso_bruto_ton": null,
     "peso_liquido_ton": null,
     "especie_carga": null
   },
+  "valor_total_nota": null,
   "dados_adicionais": null,
   "motorista_cpf": null,
   "pedido_ref": null,
@@ -104,6 +112,7 @@ export interface OCRResult {
   produto: Record<string, string | number | null>;
   impostos: Record<string, string | number | boolean | null>;
   transporte: Record<string, string | number | null>;
+  valor_total_nota: number | string | null;
   dados_adicionais: string | null;
   motorista_cpf: string | null;
   pedido_ref: string | null;

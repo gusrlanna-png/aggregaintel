@@ -29,6 +29,7 @@ import { NFImport } from "@/components/nf/nf-import";
 import { getEmissores } from "@/lib/supabase/emissores";
 import { getClientes } from "@/lib/supabase/clientes";
 import { getIntel, saveIntel } from "@/lib/supabase/intel";
+import { criarVisitasDeWhatsapp } from "@/lib/supabase/visitas";
 
 export default function InteligenciaPage() {
   const queryClient = useQueryClient();
@@ -39,6 +40,14 @@ export default function InteligenciaPage() {
   const [waFile, setWaFile] = React.useState<File | null>(null);
   const [waLoading, setWaLoading] = React.useState(false);
   const [waResult, setWaResult] = React.useState<string | null>(null);
+  const [waProgress, setWaProgress] = React.useState<{
+    etapa: string;
+    pct: number;
+  } | null>(null);
+  const [waVisitas, setWaVisitas] = React.useState<
+    { cliente_nome: string; data?: string | null; resumo?: string | null; perda_venda?: boolean }[]
+  >([]);
+  const [gerandoVisitas, setGerandoVisitas] = React.useState(false);
 
   // Feed: busca, agrupamento e perguntas
   const [busca, setBusca] = React.useState("");
@@ -78,6 +87,7 @@ export default function InteligenciaPage() {
     if (!waFile) return;
     setWaLoading(true);
     setWaResult(null);
+    setWaProgress({ etapa: "Lendo o documento…", pct: 8 });
     try {
       const { extrairTextoDocumento } = await import(
         "@/lib/import/extrair-documento"
@@ -87,6 +97,7 @@ export default function InteligenciaPage() {
         throw new Error(aviso ?? "Não foi possível ler o documento.");
       }
       if (aviso) toast.warning(aviso);
+      setWaProgress({ etapa: "Analisando com IA…", pct: 35 });
       const res = await fetch("/api/whatsapp/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,6 +109,15 @@ export default function InteligenciaPage() {
       }
       const items = Array.isArray(json.items) ? json.items : [];
       const sinteses = Array.isArray(json.sinteses) ? json.sinteses : [];
+      setWaVisitas(Array.isArray(json.visitas) ? json.visitas : []);
+
+      const totalSalvar = sinteses.length + items.length || 1;
+      let salvos = 0;
+      const tick = (etapa: string) => {
+        salvos += 1;
+        setWaProgress({ etapa, pct: 55 + Math.round((salvos / totalSalvar) * 40) });
+      };
+      setWaProgress({ etapa: "Organizando resultados…", pct: 55 });
 
       // Sínteses por cliente (geradas pela IA) — destaque no feed
       for (const s of sinteses) {
@@ -114,6 +134,7 @@ export default function InteligenciaPage() {
           texto_extraido: texto,
           tags: ["sintese", "whatsapp"],
         });
+        tick("Salvando sínteses…");
       }
 
       // Itens individuais relevantes
@@ -131,7 +152,9 @@ export default function InteligenciaPage() {
           tags: it.tags ?? ["whatsapp"],
         });
         inseridas += 1;
+        tick("Salvando itens…");
       }
+      setWaProgress({ etapa: "Concluído", pct: 100 });
       await queryClient.invalidateQueries({ queryKey: ["intel"] });
       setWaResult(
         `Mensagens: ${json.total ?? "?"} · Relevantes: ${
@@ -149,6 +172,28 @@ export default function InteligenciaPage() {
       toast.error(e instanceof Error ? e.message : "Falha no processamento.");
     } finally {
       setWaLoading(false);
+      setWaProgress(null);
+    }
+  }
+
+  async function gerarVisitas() {
+    if (waVisitas.length === 0) return;
+    setGerandoVisitas(true);
+    try {
+      const r = await criarVisitasDeWhatsapp(waVisitas);
+      let msg = `${r.criadas} visita(s) criada(s)`;
+      if (r.puladas) msg += ` · ${r.puladas} já existiam (não duplicadas)`;
+      if (r.semCliente) msg += ` · ${r.semCliente} sem cliente cadastrado (lançadas como avulsa para revisar)`;
+      toast.success(msg);
+      if (r.semCadastro.length) {
+        toast.message(`Clientes a cadastrar: ${r.semCadastro.slice(0, 6).join(", ")}${r.semCadastro.length > 6 ? "…" : ""}`);
+      }
+      setWaVisitas([]);
+      queryClient.invalidateQueries({ queryKey: ["visitas"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar visitas.");
+    } finally {
+      setGerandoVisitas(false);
     }
   }
 
@@ -280,8 +325,51 @@ export default function InteligenciaPage() {
                 )}
                 Processar documento
               </Button>
+              {waProgress && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{waProgress.etapa}</span>
+                    <span className="tabular-nums">{waProgress.pct}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${waProgress.pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               {waResult && (
                 <p className="rounded-md bg-muted p-2 text-sm">{waResult}</p>
+              )}
+              {waVisitas.length > 0 && (
+                <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+                  <p className="text-sm font-medium">
+                    {waVisitas.length} interação(ões) com cliente detectada(s) — virar visitas?
+                  </p>
+                  <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-muted-foreground">
+                    {waVisitas.slice(0, 8).map((v, i) => (
+                      <li key={i} className="truncate">
+                        • {v.cliente_nome}
+                        {v.data ? ` · ${v.data}` : ""}
+                        {v.resumo ? ` — ${v.resumo}` : ""}
+                      </li>
+                    ))}
+                    {waVisitas.length > 8 && <li>… e mais {waVisitas.length - 8}</li>}
+                  </ul>
+                  <Button size="sm" onClick={gerarVisitas} disabled={gerandoVisitas}>
+                    {gerandoVisitas ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    Gerar {waVisitas.length} visita(s)
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground">
+                    Casa com clientes cadastrados (De→Para); sem match vira avulsa
+                    para revisar. Reimportar não duplica.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>

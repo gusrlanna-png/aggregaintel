@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Loader2, RotateCw, Save, User } from "lucide-react";
+import { ArrowLeft, Loader2, RotateCw, Save, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,26 +15,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { GrupoSelect } from "@/components/concorrentes/grupo-select";
 import { GrupoEmpresaCard } from "@/components/empresas/grupo-empresa-card";
+import { ContatoExtras } from "@/components/pessoas/contato-extras";
 import { agruparEmpresas } from "@/lib/utils/agrupar-empresas";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getGruposEconomicos } from "@/lib/supabase/emissores";
 import { getHistoricoBrindes } from "@/lib/supabase/brindes";
+import { EmailsContato } from "@/components/ms365/emails-contato";
 import {
   getPessoaById,
   getEmpresasDaPessoa,
   atualizarPessoa,
-  getPessoaLinks,
   getPessoaSociedades,
-  salvarEnriquecimentoPessoa,
   cadastrarSociedadeComoEmissor,
   type Pessoa,
 } from "@/lib/supabase/pessoas";
+import { enqueueJob } from "@/lib/jobs/client";
 
-const CAMPOS: { k: keyof Pessoa; label: string }[] = [
+const CAMPOS: { k: keyof Pessoa; label: string; type?: string }[] = [
   { k: "cpf", label: "CPF" },
-  { k: "email", label: "E-mail" },
-  { k: "fone", label: "Telefone" },
-  { k: "logradouro", label: "Endereço" },
+  { k: "email", label: "E-mail principal" },
+  { k: "fone", label: "Telefone principal" },
+  { k: "aniversario", label: "Aniversário", type: "date" },
+  { k: "logradouro", label: "Endereço principal" },
   { k: "municipio", label: "Município" },
   { k: "uf", label: "UF" },
   { k: "cep", label: "CEP" },
@@ -79,10 +81,6 @@ export default function PessoaDetailPage() {
     queryKey: ["grupos-economicos"],
     queryFn: () => getGruposEconomicos(),
   });
-  const { data: redes = [] } = useQuery({
-    queryKey: ["pessoa-links", id],
-    queryFn: () => getPessoaLinks(id),
-  });
   const { data: sociedades = [] } = useQuery({
     queryKey: ["pessoa-sociedades", id],
     queryFn: () => getPessoaSociedades(id),
@@ -96,26 +94,30 @@ export default function PessoaDetailPage() {
     if (!pessoa) return;
     setAtualizando(true);
     try {
-      const res = await fetch("/api/person-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: pessoa.nome, empresas: empresas.map((e) => e.razao_social) }),
+      await enqueueJob({
+        tipo: "person_analysis",
+        titulo: `Atualizar contato: ${pessoa.nome}`,
+        entidade_tipo: "pessoa",
+        entidade_id: id,
+        payload: {
+          pessoaId: id,
+          nome: pessoa.nome,
+          empresas: empresas.map((e) => e.razao_social),
+        },
       });
-      const json = await res.json();
-      if (json.fallback || !json.dados) {
-        toast.error(json.message ?? "Sem dados encontrados na web.");
-        return;
-      }
-      const r = await salvarEnriquecimentoPessoa(id, json.dados);
-      qc.invalidateQueries({ queryKey: ["pessoa", id] });
-      qc.invalidateQueries({ queryKey: ["pessoa-links", id] });
-      qc.invalidateQueries({ queryKey: ["pessoa-sociedades", id] });
-      qc.invalidateQueries({ queryKey: ["pessoas"] });
       toast.success(
-        `Atualizado: ${r.redes} rede(s)/contato(s), ${r.sociedades} sociedade(s) encontradas.`
+        "Busca iniciada em segundo plano. Pode sair da página — acompanhe em 'Tarefas'."
       );
+      // Atualiza os painéis quando o job terminar (polling leve por alguns ciclos)
+      for (const ms of [8000, 16000, 30000, 50000]) {
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ["pessoa", id] });
+          qc.invalidateQueries({ queryKey: ["pessoa-links", id] });
+          qc.invalidateQueries({ queryKey: ["pessoa-sociedades", id] });
+        }, ms);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro na busca.");
+      toast.error(e instanceof Error ? e.message : "Erro ao iniciar a tarefa.");
     } finally {
       setAtualizando(false);
     }
@@ -244,7 +246,7 @@ export default function PessoaDetailPage() {
         </Card>
       </div>
 
-      {/* Dados cadastrais */}
+      {/* Dados cadastrais (principais) */}
       <Card>
         <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
@@ -258,6 +260,7 @@ export default function PessoaDetailPage() {
             <div key={c.k} className="space-y-1.5">
               <Label className="text-xs">{c.label}</Label>
               <Input
+                type={c.type}
                 value={(form[c.k] as string) ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, [c.k]: e.target.value }))}
               />
@@ -279,6 +282,9 @@ export default function PessoaDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Contatos: telefones, e-mails, endereços e redes (logo abaixo dos dados) */}
+      <ContatoExtras pessoaId={id} />
+
       {/* Empresas em que é sócio */}
       <Card>
         <CardContent className="p-4">
@@ -297,24 +303,28 @@ export default function PessoaDetailPage() {
                   matriz={g.matriz}
                   extras={g.unidades.slice(1)}
                   renderUnidade={(e, isMatriz) => (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-start gap-2">
                       <Link
                         href={`/concorrentes/${e.emissor_id}`}
-                        className="min-w-0 flex-1 truncate text-sm hover:underline"
+                        className="min-w-0 flex-1 hover:underline"
                       >
-                        <span className={isMatriz ? "font-semibold" : "font-medium"}>
-                          {e.razao_social}
-                        </span>
-                        {ehMatriz(e.cnpj) && (
-                          <Badge variant="outline" className="ml-1 text-[10px]">
-                            matriz
-                          </Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          {e.cnpj ? ` · ${mascararCnpj(e.cnpj)}` : ""} ·{" "}
-                          {e.municipio ?? "—"}/{e.uf ?? ""}
-                          {e.cargo ? ` · ${e.cargo}` : ""}
-                        </span>
+                        <p className="truncate text-sm leading-snug">
+                          <span className={isMatriz ? "font-semibold" : "font-medium"}>
+                            {e.razao_social}
+                          </span>
+                          {ehMatriz(e.cnpj) && (
+                            <Badge variant="outline" className="ml-1 text-[10px]">
+                              matriz
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {[
+                            e.cnpj ? mascararCnpj(e.cnpj) : null,
+                            [e.municipio, e.uf].filter(Boolean).join("/") || null,
+                            e.cargo,
+                          ].filter(Boolean).join(" · ")}
+                        </p>
                       </Link>
                       <GrupoSelect
                         emissorId={e.emissor_id}
@@ -421,31 +431,15 @@ export default function PessoaDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Redes sociais / presença digital */}
-      <Card>
-        <CardContent className="p-4">
-          <p className="mb-2 text-sm font-medium">
-            Redes sociais e presença digital ({redes.length})
-          </p>
-          {redes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma rede vinculada — use <strong>Atualizar (web)</strong>.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {redes.map((l) => (
-                <li key={l.id} className="flex items-center gap-1.5 text-sm">
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="capitalize text-muted-foreground">{l.tipo}:</span>
-                  <a href={l.url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline">
-                    {l.label ?? l.url}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {/* E-mails Microsoft 365 */}
+      {pessoa.email && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-3 text-sm font-medium">E-mails (Microsoft 365)</p>
+            <EmailsContato email={pessoa.email} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Brindes recebidos */}
       {brindesRecebidos.length > 0 && (

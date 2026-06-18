@@ -31,7 +31,7 @@ export default function PessoasPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold tracking-tight">Pessoas (sócios)</h1>
+        <h1 className="text-xl font-bold tracking-tight">Contatos</h1>
         <Link
           href="/concorrentes"
           className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
@@ -50,7 +50,7 @@ export default function PessoasPage() {
 
       {!isLoading && (
         <p className="text-sm text-muted-foreground">
-          {filtrados.length.toLocaleString("pt-BR")} pessoas
+          {filtrados.length.toLocaleString("pt-BR")} contatos
           {filtrados.length > LIMITE && ` · exibindo as primeiras ${LIMITE}`}
         </p>
       )}
@@ -62,9 +62,9 @@ export default function PessoasPage() {
       ) : filtrados.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Nenhuma pessoa cadastrada. Os sócios são criados ao usar{" "}
+            Nenhum contato cadastrado. Os contatos são criados ao usar{" "}
             <strong>Atualizar dados</strong> nos produtores (quadro societário da
-            Receita Federal).
+            Receita Federal) ou importando do Microsoft 365.
           </CardContent>
         </Card>
       ) : (

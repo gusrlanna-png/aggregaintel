@@ -37,12 +37,18 @@ export interface CadastroCnpj {
   socios: SocioCnpj[];
 }
 
-/** Consulta cadastral oficial (Receita Federal via BrasilAPI, gratuita). */
+/** Consulta cadastral (Receita Federal via fontes gratuitas, com cascata). */
 export async function buscarCadastroCnpj(
   cnpj?: string | null
 ): Promise<CadastroCnpj> {
   const d = cnpjDigitos(cnpj);
   if (d.length !== 14) throw new Error("CNPJ inválido — informe 14 dígitos.");
+  // No servidor (jobs em background) chamamos as fontes direto — URL relativa
+  // não existe fora do navegador. No browser usamos /api/cnpj (evita CORS).
+  if (typeof window === "undefined") {
+    const { consultarCnpjServidor } = await import("@/lib/api/cnpj-fontes");
+    return consultarCnpjServidor(d);
+  }
   const res = await fetch(`/api/cnpj/${d}`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "CNPJ não encontrado.");

@@ -28,6 +28,38 @@ export interface Pessoa {
   uf: string | null;
   cep: string | null;
   notas: string | null;
+  aniversario: string | null;
+}
+
+export interface PessoaTelefone {
+  id: string;
+  pessoa_id: string;
+  tipo: "celular" | "fixo" | "whatsapp" | "comercial";
+  numero: string;
+  pais_codigo: string | null;
+  rotulo: string | null;
+  principal: boolean | null;
+  criado_em: string;
+}
+
+export interface PessoaEmail {
+  id: string;
+  pessoa_id: string;
+  email: string;
+  rotulo: string | null;
+  principal: boolean | null;
+  criado_em: string;
+}
+
+export interface ContatoCliente {
+  id: string;
+  cliente_id: string;
+  pessoa_id: string;
+  cargo: string | null;
+  departamento: string | null;
+  principal: boolean | null;
+  criado_em: string;
+  pessoa: { id: string; nome: string; fone: string | null; email: string | null } | null;
 }
 export interface EmpresaDaPessoa {
   emissor_id: string;
@@ -123,6 +155,84 @@ export async function getPessoaLinks(pessoaId: string): Promise<PessoaLink[]> {
   return (data as PessoaLink[]) ?? [];
 }
 
+/** Adiciona/atualiza um link de rede social (upsert por pessoa+tipo). */
+export async function addPessoaLink(
+  pessoaId: string,
+  dados: { tipo: string; url: string; label?: string | null }
+): Promise<void> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  // remove o link existente do mesmo tipo (1 por rede) e insere o novo
+  await s.from("pessoa_links").delete().eq("pessoa_id", pessoaId).eq("tipo", dados.tipo);
+  const { error } = await s.from("pessoa_links").insert({
+    pessoa_id: pessoaId,
+    tipo: dados.tipo,
+    url: dados.url,
+    label: dados.label ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function deletePessoaLink(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("pessoa_links").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export interface PessoaEndereco {
+  id: string;
+  pessoa_id: string;
+  rotulo: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  municipio: string | null;
+  uf: string | null;
+  cep: string | null;
+  principal: boolean | null;
+  criado_em: string;
+}
+
+export async function getPessoaEnderecos(pessoaId: string): Promise<PessoaEndereco[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_enderecos")
+    .select("*")
+    .eq("pessoa_id", pessoaId)
+    .order("principal", { ascending: false })
+    .order("criado_em");
+  if (error) {
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+  return (data as PessoaEndereco[]) ?? [];
+}
+
+export async function addPessoaEndereco(
+  pessoaId: string,
+  dados: Partial<Omit<PessoaEndereco, "id" | "pessoa_id" | "criado_em">>
+): Promise<PessoaEndereco> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_enderecos")
+    .insert({ pessoa_id: pessoaId, ...dados })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PessoaEndereco;
+}
+
+export async function deletePessoaEndereco(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("pessoa_enderecos").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function getPessoaSociedades(pessoaId: string): Promise<PessoaSociedade[]> {
   if (!isSupabaseConfigured()) return [];
   const s = createClient();
@@ -154,13 +264,44 @@ export interface EnriquecimentoPessoa {
   }[];
 }
 
+export async function criarPessoa(p: {
+  nome: string;
+  email?: string | null;
+  fone?: string | null;
+  logradouro?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  cep?: string | null;
+  notas?: string | null;
+}): Promise<string> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoas")
+    .insert({
+      nome: p.nome,
+      email: p.email ?? null,
+      fone: p.fone ?? null,
+      logradouro: p.logradouro ?? null,
+      municipio: p.municipio ?? null,
+      uf: p.uf ?? null,
+      cep: p.cep ?? null,
+      notas: p.notas ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
 /** Persiste o resultado da busca na web no cadastro da pessoa. */
 export async function salvarEnriquecimentoPessoa(
   id: string,
-  d: EnriquecimentoPessoa
+  d: EnriquecimentoPessoa,
+  client?: ReturnType<typeof createClient>
 ): Promise<{ redes: number; sociedades: number }> {
-  if (!isSupabaseConfigured()) return { redes: 0, sociedades: 0 };
-  const s = createClient();
+  if (!client && !isSupabaseConfigured()) return { redes: 0, sociedades: 0 };
+  const s = client ?? createClient();
 
   // 1) Campos cadastrais (não sobrescreve com nulo)
   const patch: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
@@ -291,5 +432,129 @@ export async function atualizarPessoa(
     .from("pessoas")
     .update({ ...dados, atualizado_em: new Date().toISOString() })
     .eq("id", id);
+  if (error) throw error;
+}
+
+// ── Múltiplos telefones ───────────────────────────────────────────────────────
+
+export async function getPessoaTelefones(pessoaId: string): Promise<PessoaTelefone[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_telefones")
+    .select("*")
+    .eq("pessoa_id", pessoaId)
+    .order("principal", { ascending: false })
+    .order("criado_em");
+  if (error) {
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+  return (data as PessoaTelefone[]) ?? [];
+}
+
+export async function addPessoaTelefone(
+  pessoaId: string,
+  dados: Pick<PessoaTelefone, "tipo" | "numero"> & { rotulo?: string | null }
+): Promise<PessoaTelefone> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_telefones")
+    .insert({ pessoa_id: pessoaId, ...dados })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PessoaTelefone;
+}
+
+export async function deletePessoaTelefone(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("pessoa_telefones").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ── Múltiplos e-mails ─────────────────────────────────────────────────────────
+
+export async function getPessoaEmails(pessoaId: string): Promise<PessoaEmail[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_emails")
+    .select("*")
+    .eq("pessoa_id", pessoaId)
+    .order("principal", { ascending: false })
+    .order("criado_em");
+  if (error) {
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+  return (data as PessoaEmail[]) ?? [];
+}
+
+export async function addPessoaEmail(
+  pessoaId: string,
+  dados: Pick<PessoaEmail, "email"> & { rotulo?: string | null }
+): Promise<PessoaEmail> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_emails")
+    .insert({ pessoa_id: pessoaId, ...dados })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PessoaEmail;
+}
+
+export async function deletePessoaEmail(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("pessoa_emails").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ── Contatos vinculados a clientes ────────────────────────────────────────────
+
+export async function getContatosCliente(clienteId: string): Promise<ContatoCliente[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  try {
+    const { data, error } = await s
+      .from("cliente_pessoas")
+      .select("*, pessoa:pessoas(id, nome, fone, email)")
+      .eq("cliente_id", clienteId)
+      .order("principal", { ascending: false })
+      .order("criado_em");
+    if (error) {
+      if ((error as { code?: string }).code === "42P01") return [];
+      throw error;
+    }
+    return (data as ContatoCliente[]) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function vincularPessoaCliente(
+  clienteId: string,
+  pessoaId: string,
+  cargo?: string | null
+): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s
+    .from("cliente_pessoas")
+    .upsert({ cliente_id: clienteId, pessoa_id: pessoaId, cargo: cargo ?? null }, {
+      onConflict: "cliente_id,pessoa_id",
+    });
+  if (error) throw error;
+}
+
+export async function desvincularPessoaCliente(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("cliente_pessoas").delete().eq("id", id);
   if (error) throw error;
 }

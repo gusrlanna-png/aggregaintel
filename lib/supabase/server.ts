@@ -40,3 +40,16 @@ export function createAdminClient() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+/**
+ * Cliente autenticado a partir de um access_token (JWT) do usuário.
+ * Usado pelo processamento de jobs em segundo plano: roda no processo do
+ * servidor com a identidade do usuário (respeita RLS), sem precisar de
+ * service_role. O token é capturado no momento de enfileirar a tarefa.
+ */
+export function createTokenClient(accessToken: string) {
+  return createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

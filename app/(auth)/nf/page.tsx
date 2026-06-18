@@ -38,6 +38,8 @@ import {
   fmtReaisDec,
   fmtToneladas1,
   labelProduto,
+  precoEfetivoTon,
+  temDescontoNota,
 } from "@/lib/utils/agregados";
 import { cn } from "@/lib/utils";
 import type { NotaFiscal } from "@/lib/supabase/types";
@@ -53,13 +55,16 @@ function cifFob(v?: string | null): "CIF" | "FOB" | null {
 
 function precoInfo(nf: NotaFiscal) {
   const unit = nf.valor_unitario ?? 0;
+  // Preço efetivo (valor líquido da nota ÷ peso) é a referência real.
+  const efetivo = precoEfetivoTon(nf);
+  const desconto = temDescontoNota(nf);
   const calc =
     nf.quantidade_ton > 0 && (nf.valor_total ?? 0) > 0
       ? (nf.valor_total as number) / nf.quantidade_ton
       : 0;
   const diverge =
     unit > 0 && calc > 0 && Math.abs(unit - calc) / calc > 0.05;
-  return { unit, calc, diverge };
+  return { unit, calc, efetivo, desconto, diverge };
 }
 
 type NFSortKey = "numero" | "emissor" | "data" | "produto" | "qtd" | "preco";
@@ -76,10 +81,8 @@ function nfSortValue(nf: NotaFiscal, key: NFSortKey): unknown {
       return labelProduto(nf.produto_tipo);
     case "qtd":
       return nf.quantidade_ton;
-    case "preco": {
-      const { unit, calc } = precoInfo(nf);
-      return unit > 0 ? unit : calc;
-    }
+    case "preco":
+      return precoInfo(nf).efetivo;
     default:
       return null;
   }
@@ -92,6 +95,7 @@ export default function NFListPage() {
   const [revisado, setRevisado] = React.useState("all");
   const [di, setDi] = React.useState("");
   const [df, setDf] = React.useState("");
+  const [ocultarDesc, setOcultarDesc] = React.useState(false);
 
   const { data: emissores } = useQuery({
     queryKey: ["emissores-all"],
@@ -112,19 +116,22 @@ export default function NFListPage() {
 
   const [busca, setBusca] = React.useState("");
   const { sort, toggle } = useSort<NFSortKey>("data", "desc");
-  const base = (data?.data ?? []).filter((nf) =>
-    matchBusca(
-      busca,
-      nf.numero_nf,
-      nf.serie,
-      nf.emissor?.razao_social,
-      labelProduto(nf.produto_tipo),
-      nf.produto_desc,
-      nf.valor_total,
-      nf.valor_unitario,
-      nf.data_emissao
-    )
-  );
+  const base = (data?.data ?? [])
+    .filter((nf) => !ocultarDesc || !nf.desconsiderada)
+    .filter((nf) =>
+      matchBusca(
+        busca,
+        nf.numero_nf,
+        nf.serie,
+        nf.emissor?.razao_social,
+        labelProduto(nf.produto_tipo),
+        nf.produto_desc,
+        nf.valor_total,
+        nf.valor_unitario,
+        nf.data_emissao
+      )
+    );
+  const nDesconsideradas = (data?.data ?? []).filter((n) => n.desconsiderada).length;
   const rows = sortRows(base, sort, nfSortValue);
 
   return (
@@ -202,6 +209,17 @@ export default function NFListPage() {
             onChange={(e) => setDf(e.target.value)}
             aria-label="Data fim"
           />
+          {nDesconsideradas > 0 && (
+            <label className="col-span-2 flex cursor-pointer items-center gap-2 text-sm sm:col-span-3 lg:col-span-5">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={ocultarDesc}
+                onChange={(e) => setOcultarDesc(e.target.checked)}
+              />
+              Ocultar desconsideradas ({nDesconsideradas})
+            </label>
+          )}
         </CardContent>
       </Card>
 
@@ -259,7 +277,7 @@ export default function NFListPage() {
               </TableHeader>
               <TableBody>
                 {rows.map((nf) => {
-                  const { unit, calc, diverge } = precoInfo(nf);
+                  const { unit, efetivo, desconto } = precoInfo(nf);
                   const cf = cifFob(nf.frete_por_conta);
                   const temFrete = (nf.frete_valor ?? 0) > 0 || cf;
                   const rsTonKm =
@@ -272,7 +290,10 @@ export default function NFListPage() {
                   return (
                     <TableRow
                       key={nf.id}
-                      className="cursor-pointer"
+                      className={cn(
+                        "cursor-pointer",
+                        nf.desconsiderada && "opacity-60"
+                      )}
                       onDoubleClick={() => router.push(`/nf/${nf.id}/editar`)}
                     >
                       <TableCell className="font-medium">
@@ -280,6 +301,15 @@ export default function NFListPage() {
                           {nf.numero_nf}
                           {nf.serie ? `/${nf.serie}` : ""}
                         </Link>
+                        {nf.desconsiderada && (
+                          <Badge
+                            variant="destructive"
+                            className="ml-2 text-[10px]"
+                            title="NF desconsiderada — fora dos cálculos"
+                          >
+                            ✕ Desconsiderada
+                          </Badge>
+                        )}
                         {!nf.revisado && (
                           <Badge variant="warning" className="ml-2 text-[10px]">
                             pendente
@@ -299,18 +329,20 @@ export default function NFListPage() {
                       <TableCell
                         className={cn(
                           "text-right tabular-nums",
-                          diverge && "font-semibold text-destructive"
+                          desconto && "text-amber-700"
                         )}
                         title={
-                          diverge
-                            ? `Divergência: total ÷ peso = ${fmtReais(
-                                calc
-                              )}/t`
+                          desconto
+                            ? `Desconto em nota: destacado ${fmtReais(unit)}/t · efetivo ${fmtReais(efetivo)}/t`
                             : undefined
                         }
                       >
-                        {unit > 0 ? fmtReais(unit) : calc > 0 ? fmtReais(calc) : "—"}
-                        {diverge && " ⚠"}
+                        {efetivo > 0 ? fmtReais(efetivo) : "—"}
+                        {desconto && (
+                          <span className="ml-1 text-[10px]" title="desconto em nota">
+                            %↓
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
                         {temFrete ? (

@@ -253,6 +253,70 @@ export async function criarVisita(
   return visitaId;
 }
 
+export interface VisitaWhatsappCandidata {
+  cliente_nome: string;
+  data?: string | null;
+  resumo?: string | null;
+  perda_venda?: boolean;
+}
+
+/**
+ * Cria visitas a partir de candidatas extraídas de uma conversa de WhatsApp.
+ * De→Para: casa o nome com um cliente cadastrado (vincula) ou lança como avulsa
+ * (cliente_nome_livre) para revisão. Dedup: não duplica na reimportação (índice
+ * único por origem+origem_ref = cliente|data).
+ */
+export async function criarVisitasDeWhatsapp(
+  candidatos: VisitaWhatsappCandidata[]
+): Promise<{ criadas: number; puladas: number; semCliente: number; semCadastro: string[] }> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
+  const supabase = createClient();
+  const { getClientes } = await import("./clientes");
+  const clientes = await getClientes();
+  const norm = (s: string) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  let criadas = 0;
+  let puladas = 0;
+  let semCliente = 0;
+  const semCadastro: string[] = [];
+
+  for (const c of candidatos) {
+    const nome = (c.cliente_nome ?? "").trim();
+    if (!nome) continue;
+    const nn = norm(nome);
+    const match = clientes.find((cl) => {
+      const r = norm(cl.razao_social);
+      return r.length > 2 && (r.includes(nn) || nn.includes(r));
+    });
+    const data =
+      c.data && /^\d{4}-\d{2}-\d{2}/.test(c.data) ? c.data.slice(0, 10) : null;
+    const origem_ref = `${match ? match.id : nn}|${data ?? "s"}`;
+    const checkin = data ? `${data}T12:00:00` : new Date().toISOString();
+    if (!match) {
+      semCliente++;
+      if (!semCadastro.includes(nome)) semCadastro.push(nome);
+    }
+
+    const { error } = await supabase.from("visitas").insert({
+      cliente_id: match?.id ?? null,
+      cliente_nome_livre: match ? null : nome,
+      avulsa: !match,
+      observacoes: c.resumo ?? null,
+      perda_venda: !!c.perda_venda,
+      checkin_at: checkin,
+      origem: "whatsapp",
+      origem_ref,
+    });
+    if (error) {
+      // 23505 = índice único (já importada) → pula sem erro
+      puladas++;
+      continue;
+    }
+    criadas++;
+  }
+  return { criadas, puladas, semCliente, semCadastro };
+}
+
 /** Cadastra um cliente novo a partir do campo (fica pendente de validação). */
 export async function cadastrarClientePendente(d: {
   razao_social: string;

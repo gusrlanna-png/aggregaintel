@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -201,9 +202,17 @@ export default function DashboardPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <BarChart3 className="h-4 w-4" />
-                    Ranking de produção estimada
+                  <CardTitle className="flex items-center justify-between gap-2 text-base">
+                    <span className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4" />
+                      Ranking de produção estimada
+                    </span>
+                    <Link
+                      href="/ranking"
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Top 20 por mês →
+                    </Link>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>

@@ -28,7 +28,11 @@ import {
 } from "@/components/ui/sortable-table";
 import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
 import { Button } from "@/components/ui/button";
-import { getProjecaoClientes, type ProjecaoCliente } from "@/lib/supabase/projecao-base";
+import {
+  getPrecoEfetivoPorCnpj,
+  getProjecaoClientes,
+  type ProjecaoCliente,
+} from "@/lib/supabase/projecao-base";
 import { fmtReais, fmtToneladas1 } from "@/lib/utils/agregados";
 
 type SortKey =
@@ -37,7 +41,8 @@ type SortKey =
   | "cidade"
   | "realizado"
   | "projetado"
-  | "previsto";
+  | "previsto"
+  | "precoNf";
 
 function val(p: ProjecaoCliente, k: SortKey): unknown {
   switch (k) {
@@ -67,6 +72,15 @@ export default function ProjecaoPage() {
     queryKey: ["projecao-clientes"],
     queryFn: getProjecaoClientes,
   });
+  // Preço efetivo real das NFs por CNPJ (realidade × projeção do BI).
+  const { data: precoNfMap } = useQuery({
+    queryKey: ["projecao-preco-nf"],
+    queryFn: getPrecoEfetivoPorCnpj,
+  });
+  const precoNf = React.useCallback(
+    (c: ProjecaoCliente) => precoNfMap?.get(c.cnpj_digitos)?.preco_efetivo ?? 0,
+    [precoNfMap]
+  );
 
   const segmentos = React.useMemo(
     () =>
@@ -81,8 +95,10 @@ export default function ProjecaoPage() {
       if (segmento !== "all" && c.segmento !== segmento) return false;
       return matchBusca(busca, c.nome, c.cnpj, c.segmento, c.cidade);
     });
-    return sortRows(base, sort, val);
-  }, [clientes, busca, segmento, sort]);
+    const valEx = (p: ProjecaoCliente, k: SortKey) =>
+      k === "precoNf" ? precoNf(p) : val(p, k);
+    return sortRows(base, sort, valEx);
+  }, [clientes, busca, segmento, sort, precoNf]);
 
   const tot = filtrados.reduce(
     (a, c) => ({
@@ -186,6 +202,15 @@ export default function ProjecaoPage() {
                   >
                     Previsto (ano)
                   </SortableHead>
+                  <SortableHead
+                    sortKey="precoNf"
+                    sort={sort}
+                    onSort={toggle}
+                    align="right"
+                    className="hidden text-right md:table-cell"
+                  >
+                    R$/t NF (real)
+                  </SortableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -213,6 +238,12 @@ export default function ProjecaoPage() {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {fmtReais(c.valor_previsto_ano)}
                     </TableCell>
+                    <TableCell
+                      className="hidden text-right tabular-nums text-amber-700 dark:text-amber-400 md:table-cell"
+                      title="Preço efetivo médio das NFs recebidas (valor líquido ÷ toneladas)"
+                    >
+                      {precoNf(c) > 0 ? fmtReais(precoNf(c)) : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -231,6 +262,7 @@ export default function ProjecaoPage() {
                   <TableCell className="text-right font-semibold tabular-nums">
                     {fmtReais(tot.t)}
                   </TableCell>
+                  <TableCell className="hidden md:table-cell" />
                 </TableRow>
               </TableFooter>
             </Table>

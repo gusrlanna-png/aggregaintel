@@ -558,3 +558,128 @@ export async function desvincularPessoaCliente(id: string): Promise<void> {
   const { error } = await s.from("cliente_pessoas").delete().eq("id", id);
   if (error) throw error;
 }
+
+// ── Identidades multi-fonte (m365, 365, linkedin, instagram, whatsapp, …) ──────
+
+export interface PessoaIdentidade {
+  id: string;
+  pessoa_id: string;
+  fonte: string;
+  external_id: string | null;
+  handle: string | null;
+  url: string | null;
+  criado_em: string;
+}
+
+/** Fontes conhecidas (rótulos amigáveis). Extensível: aceita qualquer string. */
+export const FONTES_IDENTIDADE: Record<string, string> = {
+  m365: "Microsoft 365",
+  "365": "Três-meia-cinco (365)",
+  contrato: "Contrato",
+  linkedin: "LinkedIn",
+  instagram: "Instagram",
+  whatsapp: "WhatsApp",
+  receita_qsa: "Receita (QSA)",
+  outro: "Outra",
+};
+
+export async function getPessoaIdentidades(pessoaId: string): Promise<PessoaIdentidade[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_identidades")
+    .select("id, pessoa_id, fonte, external_id, handle, url, criado_em")
+    .eq("pessoa_id", pessoaId)
+    .order("criado_em");
+  if (error) {
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+  return (data as PessoaIdentidade[]) ?? [];
+}
+
+export async function addPessoaIdentidade(
+  pessoaId: string,
+  dados: { fonte: string; external_id?: string | null; handle?: string | null; url?: string | null }
+): Promise<PessoaIdentidade> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_identidades")
+    .insert({
+      pessoa_id: pessoaId,
+      fonte: dados.fonte,
+      external_id: dados.external_id || null,
+      handle: dados.handle || null,
+      url: dados.url || null,
+    })
+    .select("id, pessoa_id, fonte, external_id, handle, url, criado_em")
+    .single();
+  if (error) throw error;
+  return data as PessoaIdentidade;
+}
+
+export async function deletePessoaIdentidade(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.from("pessoa_identidades").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ── Pessoas duplicadas + mesclagem ────────────────────────────────────────────
+
+export interface PessoaDup {
+  id: string;
+  nome: string;
+  cpf: string | null;
+  email: string | null;
+  fone: string | null;
+  atualizado_em: string | null;
+}
+
+export interface GrupoPessoaDuplicada {
+  chave: string;
+  rotulo: string;
+  membros: PessoaDup[];
+}
+
+/** Agrupa pessoas candidatas a duplicidade: mesmo CPF, ou mesmo nome normalizado. */
+export async function getPessoasDuplicadas(): Promise<GrupoPessoaDuplicada[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoas")
+    .select("id, nome, cpf, email, fone, atualizado_em")
+    .limit(8000);
+  if (error) throw error;
+  const norm = (n: string) =>
+    n.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+  const grupos = new Map<string, { rotulo: string; membros: PessoaDup[] }>();
+  for (const p of (data as PessoaDup[]) ?? []) {
+    const dig = (p.cpf ?? "").replace(/\D/g, "");
+    const chave = dig.length === 11 ? `cpf:${dig}` : `nome:${norm(p.nome)}`;
+    if (!grupos.has(chave)) grupos.set(chave, { rotulo: p.nome, membros: [] });
+    grupos.get(chave)!.membros.push(p);
+  }
+  return [...grupos.entries()]
+    .filter(([, g]) => g.membros.length > 1)
+    .map(([chave, g]) => ({
+      chave,
+      rotulo: g.rotulo,
+      membros: g.membros.sort((a, b) =>
+        (b.atualizado_em ?? "").localeCompare(a.atualizado_em ?? "")
+      ),
+    }))
+    .sort((a, b) => b.membros.length - a.membros.length);
+}
+
+/** Mescla pessoas duplicadas no mestre (RPC mesclar_pessoas). */
+export async function mesclarPessoas(masterId: string, dupIds: string[]): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const s = createClient();
+  const { error } = await s.rpc("mesclar_pessoas", {
+    p_master: masterId,
+    p_dups: dupIds,
+  });
+  if (error) throw error;
+}

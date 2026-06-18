@@ -104,6 +104,13 @@ const ITENS: ConfigItem[] = [
     descricao:
       "Encontra cadastros de cliente repetidos pelo mesmo CNPJ e mescla num único registro, movendo NFs, visitas e contatos.",
   },
+  {
+    href: "/configuracoes/pessoas-duplicadas",
+    icon: Merge,
+    titulo: "Pessoas duplicadas",
+    descricao:
+      "Encontra pessoas repetidas (mesmo CPF ou nome) e mescla num único cadastro, movendo vínculos, identidades e sociedades.",
+  },
 ];
 
 export default function ConfiguracoesPage() {

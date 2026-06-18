@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { GrupoSelect } from "@/components/concorrentes/grupo-select";
 import { GrupoEmpresaCard } from "@/components/empresas/grupo-empresa-card";
 import { ContatoExtras } from "@/components/pessoas/contato-extras";
+import { PessoaIdentidades } from "@/components/pessoas/pessoa-identidades";
 import { agruparEmpresas } from "@/lib/utils/agrupar-empresas";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getGruposEconomicos } from "@/lib/supabase/emissores";
@@ -284,6 +285,9 @@ export default function PessoaDetailPage() {
 
       {/* Contatos: telefones, e-mails, endereços e redes (logo abaixo dos dados) */}
       <ContatoExtras pessoaId={id} />
+
+      {/* Identidades de origem (M365, 365, LinkedIn, WhatsApp…) */}
+      <PessoaIdentidades pessoaId={id} />
 
       {/* Empresas em que é sócio */}
       <Card>

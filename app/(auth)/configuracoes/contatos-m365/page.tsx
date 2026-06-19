@@ -23,7 +23,7 @@ import {
   foneDoContato,
   type GraphContact,
 } from "@/lib/graph/contacts";
-import { criarPessoa, getPessoas } from "@/lib/supabase/pessoas";
+import { addPessoaIdentidade, criarPessoa, getPessoas } from "@/lib/supabase/pessoas";
 
 export default function ContatosM365Page() {
   const [loading, setLoading] = React.useState(false);
@@ -80,13 +80,24 @@ export default function ContatosM365Page() {
     const email = c.emailAddresses?.[0]?.address ?? null;
     const addr = enderecoDoContato(c);
     try {
-      await criarPessoa({
+      const pessoaId = await criarPessoa({
         nome: c.displayName,
         email,
         fone: foneDoContato(c),
         ...addr,
         notas: "Importado do Microsoft 365",
       });
+      // Vincula a identidade M365 (cadastro unificado por origem).
+      try {
+        await addPessoaIdentidade(pessoaId, {
+          fonte: "m365",
+          external_id: c.id,
+          handle: c.displayName,
+          url: email ? `mailto:${email}` : null,
+        });
+      } catch {
+        /* identidade já vinculada — ignora */
+      }
       setImportados((prev) => new Set([...prev, c.id]));
       if (email) setPessoasEmails((prev) => new Set([...prev, email.toLowerCase()]));
       toast.success(`${c.displayName} importado.`);

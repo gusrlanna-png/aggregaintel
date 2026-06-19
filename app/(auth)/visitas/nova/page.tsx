@@ -39,6 +39,10 @@ import { cn } from "@/lib/utils";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { getClientes } from "@/lib/supabase/clientes";
 import { getPessoas, getContatosCliente } from "@/lib/supabase/pessoas";
+import {
+  getClienteEnderecos,
+  TIPOS_ENDERECO,
+} from "@/lib/supabase/cliente-enderecos";
 import { getBrindes } from "@/lib/supabase/brindes";
 import {
   cadastrarClientePendente,
@@ -160,6 +164,7 @@ export default function NovaVisitaPage() {
   const [motivoId, setMotivoId] = React.useState("");
   const [categoriaId, setCategoriaId] = React.useState("");
   const [segmento, setSegmento] = React.useState("");
+  const [enderecoId, setEnderecoId] = React.useState("");
   const [obs, setObs] = React.useState("");
 
   const [perda, setPerda] = React.useState(false);
@@ -229,6 +234,16 @@ export default function NovaVisitaPage() {
     queryFn: () => getContatosCliente(clienteId!),
     enabled: !!clienteId,
   });
+  // Obras/usinas cadastradas do cliente (locais de entrega do mesmo CNPJ).
+  const { data: enderecosCliente = [] } = useQuery({
+    queryKey: ["cliente-enderecos", clienteId],
+    queryFn: () => getClienteEnderecos(clienteId!),
+    enabled: !!clienteId && !modoNovo,
+  });
+  // Ao trocar de cliente, zera a obra selecionada.
+  React.useEffect(() => {
+    setEnderecoId("");
+  }, [clienteId]);
 
   const pegarLocal = React.useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -360,6 +375,7 @@ export default function NovaVisitaPage() {
       await criarVisita(
         {
           cliente_id: cid,
+          endereco_id: modoNovo ? null : enderecoId || null,
           motivo_id: motivoId,
           categoria_id: categoriaId || null,
           segmento: segmento || novoSegmento || null,
@@ -530,6 +546,40 @@ export default function NovaVisitaPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {enderecosCliente.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Obra / usina atendida (opcional)
+                  </p>
+                  <Select
+                    value={enderecoId || "none"}
+                    onValueChange={(v) => {
+                      const id = v === "none" ? "" : v;
+                      setEnderecoId(id);
+                      const e = enderecosCliente.find((x) => x.id === id);
+                      if (e?.segmento) setSegmento(e.segmento);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="— Sede / sem obra específica" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        — Sede / sem obra específica
+                      </SelectItem>
+                      {enderecosCliente.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {(e.nome || e.logradouro || "Endereço") +
+                            (e.tipo
+                              ? ` · ${TIPOS_ENDERECO[e.tipo] ?? e.tipo}`
+                              : "") +
+                            (e.municipio ? ` · ${e.municipio}` : "")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </>

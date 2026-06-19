@@ -43,6 +43,7 @@ export interface NovaVisita {
   cliente_id?: string | null;
   cliente_secundario_id?: string | null;
   cliente_nome_livre?: string | null;
+  endereco_id?: string | null;
   pessoa_id?: string | null;
   pessoa_nome?: string | null;
   motivo_id?: string | null;

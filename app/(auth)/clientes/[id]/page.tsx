@@ -21,6 +21,7 @@ import {
 } from "@/components/clientes/fornecedor-mix";
 import { OportunidadeMBV } from "@/components/clientes/oportunidade-mbv";
 import { NfsCliente } from "@/components/clientes/nfs-cliente";
+import { ClienteEnderecos } from "@/components/clientes/cliente-enderecos";
 import { PapeisEmpresa } from "@/components/empresas/papeis-empresa";
 import { DistribuicaoMensal } from "@/components/clientes/distribuicao-mensal";
 import {
@@ -382,6 +383,9 @@ export default function ClienteDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Endereços de obras/usinas/fábricas (mesmo CNPJ, locais de entrega) */}
+      <ClienteEnderecos empresaId={id} />
 
       {/* Papéis do cadastro único (produtor/cliente/fornecedor/transportador) */}
       <PapeisEmpresa empresaId={id} contexto="cliente" />

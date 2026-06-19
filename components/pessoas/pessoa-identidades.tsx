@@ -133,6 +133,17 @@ export function PessoaIdentidades({ pessoaId }: { pessoaId: string }) {
                       <dd>{it.criado_por_nome || "—"}</dd>
                       <dt className="text-muted-foreground">Data</dt>
                       <dd>{new Date(it.criado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</dd>
+                      {(() => {
+                        const r = (it.raw ?? {}) as { emails?: string[]; telefones?: string[] };
+                        const out: React.ReactNode[] = [];
+                        if (r.emails?.length) out.push(
+                          <React.Fragment key="re"><dt className="text-muted-foreground">E-mails de origem</dt><dd className="break-all">{r.emails.join(", ")}</dd></React.Fragment>
+                        );
+                        if (r.telefones?.length) out.push(
+                          <React.Fragment key="rt"><dt className="text-muted-foreground">Telefones de origem</dt><dd>{r.telefones.join(", ")}</dd></React.Fragment>
+                        );
+                        return out;
+                      })()}
                     </dl>
                   )}
                 </div>

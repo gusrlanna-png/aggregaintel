@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PiiReveal } from "@/components/ui/pii-reveal";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -236,9 +235,7 @@ export function ContatoExtras({ pessoaId }: { pessoaId: string }) {
               {telefones.map((t) => (
                 <div key={t.id} className="flex items-center gap-2 px-3 py-2">
                   <Badge variant="outline" className="shrink-0 text-[10px] capitalize">{t.tipo}</Badge>
-                  <span className="flex-1 text-sm">
-                    <PiiReveal valor={t.numero} tipo="fone" recurso="pessoa/telefone" />
-                  </span>
+                  <span className="flex-1 text-sm">{t.numero}</span>
                   <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive"
                     onClick={async () => { await deletePessoaTelefone(t.id); inval("pessoa-telefones"); }}
                     aria-label="Remover">
@@ -293,9 +290,7 @@ export function ContatoExtras({ pessoaId }: { pessoaId: string }) {
             <div className="mb-2 divide-y rounded-md border">
               {emails.map((e) => (
                 <div key={e.id} className="flex items-center gap-2 px-3 py-2">
-                  <span className="flex-1 truncate text-sm">
-                    <PiiReveal valor={e.email} tipo="email" recurso="pessoa/email" />
-                  </span>
+                  <span className="flex-1 truncate text-sm">{e.email}</span>
                   {e.rotulo && <Badge variant="outline" className="shrink-0 text-[10px]">{e.rotulo}</Badge>}
                   <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive"
                     onClick={async () => { await deletePessoaEmail(e.id); inval("pessoa-emails"); }}

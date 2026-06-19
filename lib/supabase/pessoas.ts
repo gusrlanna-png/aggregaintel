@@ -571,6 +571,7 @@ export interface PessoaIdentidade {
   conta_origem: string | null;
   criado_por: string | null;
   criado_por_nome?: string | null;
+  raw: Record<string, unknown> | null;
   criado_em: string;
 }
 
@@ -591,7 +592,7 @@ export async function getPessoaIdentidades(pessoaId: string): Promise<PessoaIden
   const s = createClient();
   const { data, error } = await s
     .from("pessoa_identidades")
-    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, criado_em")
+    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, raw, criado_em")
     .eq("pessoa_id", pessoaId)
     .order("criado_em");
   if (error) {
@@ -611,7 +612,14 @@ export async function getPessoaIdentidades(pessoaId: string): Promise<PessoaIden
 
 export async function addPessoaIdentidade(
   pessoaId: string,
-  dados: { fonte: string; external_id?: string | null; handle?: string | null; url?: string | null; conta_origem?: string | null }
+  dados: {
+    fonte: string;
+    external_id?: string | null;
+    handle?: string | null;
+    url?: string | null;
+    conta_origem?: string | null;
+    raw?: Record<string, unknown> | null;
+  }
 ): Promise<PessoaIdentidade> {
   if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
   const s = createClient();
@@ -624,8 +632,9 @@ export async function addPessoaIdentidade(
       handle: dados.handle || null,
       url: dados.url || null,
       conta_origem: dados.conta_origem || null,
+      raw: dados.raw ?? null,
     })
-    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, criado_em")
+    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, raw, criado_em")
     .single();
   if (error) throw error;
   return data as PessoaIdentidade;
@@ -744,6 +753,7 @@ export interface IndicePessoas {
   byEmail: Map<string, { id: string; nome: string }>;
   byFone: Map<string, { id: string; nome: string }>;
   byNome: Map<string, { id: string; nome: string }>;
+  byExternal: Map<string, { id: string; nome: string }>; // fonte:external_id já vinculado
   todos: { id: string; nome: string; tokens: string[] }[];
 }
 
@@ -753,14 +763,16 @@ export async function getIndicePessoas(): Promise<IndicePessoas> {
     byEmail: new Map(),
     byFone: new Map(),
     byNome: new Map(),
+    byExternal: new Map(),
     todos: [],
   };
   if (!isSupabaseConfigured()) return idx;
   const s = createClient();
-  const [pes, emails, fones] = await Promise.all([
+  const [pes, emails, fones, idents] = await Promise.all([
     s.from("pessoas").select("id, nome, email, fone"),
     s.from("pessoa_emails").select("pessoa_id, email"),
     s.from("pessoa_telefones").select("pessoa_id, numero"),
+    s.from("pessoa_identidades").select("pessoa_id, fonte, external_id"),
   ]);
   const nomeDe = new Map<string, string>();
   for (const p of (pes.data as { id: string; nome: string; email: string | null; fone: string | null }[] | null) ?? []) {
@@ -779,6 +791,9 @@ export async function getIndicePessoas(): Promise<IndicePessoas> {
     const k = foneKey(f.numero);
     if (k) idx.byFone.set(k, { id: f.pessoa_id, nome: nomeDe.get(f.pessoa_id) ?? "" });
   }
+  for (const it of (idents.data as { pessoa_id: string; fonte: string; external_id: string | null }[] | null) ?? []) {
+    if (it.external_id) idx.byExternal.set(`${it.fonte}:${it.external_id}`, { id: it.pessoa_id, nome: nomeDe.get(it.pessoa_id) ?? "" });
+  }
   return idx;
 }
 
@@ -793,9 +808,14 @@ export interface MatchPessoa {
 /** Casa um contato com o índice: e-mail/telefone/nome exatos = existe; nome
  *  parcial (todos os tokens contidos) = possível duplicata; senão = novo. */
 export function casarContato(
-  c: { nome: string; emails?: string[]; fones?: string[] },
+  c: { nome: string; emails?: string[]; fones?: string[]; externalId?: string | null; fonte?: string },
   idx: IndicePessoas
 ): MatchPessoa {
+  // Já vinculado anteriormente (qualquer sessão/usuário) — histórico persistente.
+  if (c.externalId) {
+    const j = idx.byExternal.get(`${c.fonte ?? "m365"}:${c.externalId}`);
+    if (j) return { tipo: "existe", pessoaId: j.id, pessoaNome: j.nome, motivo: "já vinculado" };
+  }
   for (const e of c.emails ?? []) {
     const m = idx.byEmail.get((e ?? "").trim().toLowerCase());
     if (m) return { tipo: "existe", pessoaId: m.id, pessoaNome: m.nome, motivo: "e-mail igual" };

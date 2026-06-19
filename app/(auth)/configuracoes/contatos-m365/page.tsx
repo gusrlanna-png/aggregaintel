@@ -47,6 +47,14 @@ type Aba = "novos" | "sistema" | "duplicatas";
 const emailsDe = (c: GraphContact) => (c.emailAddresses ?? []).map((e) => e.address).filter(Boolean);
 const fonesDe = (c: GraphContact) =>
   [c.mobilePhone, ...(c.businessPhones ?? [])].filter(Boolean) as string[];
+/** Snapshot dos dados do contato como vieram da origem (preserva p/ sync futuro). */
+const rawDe = (c: GraphContact): Record<string, unknown> => ({
+  nome: c.displayName,
+  emails: emailsDe(c),
+  telefones: fonesDe(c),
+  endereco: enderecoDoContato(c),
+  capturado_em: new Date().toISOString(),
+});
 const norm = (s: string) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -98,7 +106,7 @@ export default function ContatosM365Page() {
     const m = new Map<string, MatchPessoa>();
     if (contatos && indice) {
       for (const c of contatos)
-        m.set(c.id, casarContato({ nome: c.displayName, emails: emailsDe(c), fones: fonesDe(c) }, indice));
+        m.set(c.id, casarContato({ nome: c.displayName, emails: emailsDe(c), fones: fonesDe(c), externalId: c.id, fonte: "m365" }, indice));
     }
     return m;
   }, [contatos, indice]);
@@ -138,6 +146,7 @@ export default function ContatosM365Page() {
         handle: c.displayName,
         url: email ? `mailto:${email}` : null,
         conta_origem: contaOrigem,
+        raw: rawDe(c),
       });
       // Traz os dados do contato (e-mails/telefones) para o cadastro existente.
       const r = await adicionarDadosContato(pessoaId, { emails: emailsDe(c), fones: fonesDe(c) });
@@ -172,6 +181,7 @@ export default function ContatosM365Page() {
           handle: c.displayName,
           url: email ? `mailto:${email}` : null,
           conta_origem: contaOrigem,
+          raw: rawDe(c),
         });
       } catch {/* identidade já existe */}
       // Adiciona TODOS os e-mails/telefones do contato (não só o principal).

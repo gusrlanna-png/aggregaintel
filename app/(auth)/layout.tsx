@@ -4,6 +4,7 @@ import { ImportProvider } from "@/components/import/import-provider";
 import { ImportIndicator } from "@/components/import/import-indicator";
 import { JobsIndicator } from "@/components/jobs/jobs-indicator";
 import { ChatWidget } from "@/components/chat/chat-widget";
+import { AuditTracker } from "@/components/audit/audit-tracker";
 
 export default function AuthLayout({
   children,
@@ -20,6 +21,7 @@ export default function AuthLayout({
         <ImportIndicator />
         <JobsIndicator />
         <ChatWidget />
+        <AuditTracker />
         <BottomNav />
       </div>
     </ImportProvider>

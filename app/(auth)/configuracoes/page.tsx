@@ -118,6 +118,13 @@ const ITENS: ConfigItem[] = [
     descricao:
       "Importa contatos de Google Contacts / celular (CSV) como pessoas, com telefones e e-mails. Ignora quem já existe (De→Para por nome).",
   },
+  {
+    href: "/configuracoes/auditoria",
+    icon: ShieldCheck,
+    titulo: "Auditoria e acessos",
+    descricao:
+      "Dispositivos registrados (aprovar/bloquear) e histórico de acessos/ações com IP e localização. Base de segurança e LGPD. Apenas administradores.",
+  },
 ];
 
 export default function ConfiguracoesPage() {

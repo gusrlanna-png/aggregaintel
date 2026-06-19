@@ -41,6 +41,7 @@ import {
 } from "@/lib/supabase/cadastro-empresa";
 import { enqueueJob } from "@/lib/jobs/client";
 import { EmissorNFsTab } from "@/components/concorrentes/emissor-nfs-tab";
+import { PapeisEmpresa } from "@/components/empresas/papeis-empresa";
 import {
   isMbvEmissor,
   fmtNumero,
@@ -308,6 +309,9 @@ export default function ConcorrenteDetailPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Papéis do cadastro único (produtor/cliente/fornecedor/transportador) */}
+      <PapeisEmpresa empresaId={id} />
 
       {/* Toggle "nossa empresa (MBV)" */}
       <Card>

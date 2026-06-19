@@ -21,6 +21,7 @@ import {
 } from "@/components/clientes/fornecedor-mix";
 import { OportunidadeMBV } from "@/components/clientes/oportunidade-mbv";
 import { NfsCliente } from "@/components/clientes/nfs-cliente";
+import { PapeisEmpresa } from "@/components/empresas/papeis-empresa";
 import { DistribuicaoMensal } from "@/components/clientes/distribuicao-mensal";
 import {
   getClienteById,
@@ -381,6 +382,9 @@ export default function ClienteDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Papéis do cadastro único (produtor/cliente/fornecedor/transportador) */}
+      <PapeisEmpresa empresaId={id} />
 
       {/* Quadro societário (sócios) — trazido pelo "Atualizar dados" */}
       {socios.length > 0 && (

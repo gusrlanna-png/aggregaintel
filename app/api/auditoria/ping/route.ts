@@ -11,22 +11,35 @@ function ipDe(req: NextRequest): string | null {
   return req.headers.get("x-real-ip");
 }
 
+interface Geo {
+  cidade: string | null;
+  uf: string | null;
+  pais: string | null;
+  lat: number | null;
+  lng: number | null;
+}
 /** Geolocalização aproximada por IP (best-effort, sem chave; timeout curto). */
-async function geoDeIp(ip: string | null): Promise<{ cidade: string | null; uf: string | null; pais: string | null }> {
-  const vazio = { cidade: null, uf: null, pais: null };
+async function geoDeIp(ip: string | null): Promise<Geo> {
+  const vazio: Geo = { cidade: null, uf: null, pais: null, lat: null, lng: null };
   if (!ip || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.")) return vazio;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 1500);
     const res = await fetch(
-      `http://ip-api.com/json/${ip}?fields=status,country,regionName,city`,
+      `http://ip-api.com/json/${ip}?fields=status,country,regionName,city,lat,lon`,
       { signal: ctrl.signal }
     );
     clearTimeout(t);
     if (!res.ok) return vazio;
     const j = await res.json();
     if (j?.status !== "success") return vazio;
-    return { cidade: j.city ?? null, uf: j.regionName ?? null, pais: j.country ?? null };
+    return {
+      cidade: j.city ?? null,
+      uf: j.regionName ?? null,
+      pais: j.country ?? null,
+      lat: typeof j.lat === "number" ? j.lat : null,
+      lng: typeof j.lon === "number" ? j.lon : null,
+    };
   } catch {
     return vazio;
   }
@@ -51,11 +64,11 @@ export async function POST(req: NextRequest) {
   const ua = req.headers.get("user-agent")?.slice(0, 400) ?? null;
 
   // Dispositivo: registra/atualiza; resolve geo só quando é novo ou mudou de IP.
-  let geo = { cidade: null as string | null, uf: null as string | null, pais: null as string | null };
+  let geo: Geo = { cidade: null, uf: null, pais: null, lat: null, lng: null };
   if (deviceId) {
     const { data: existente } = await supabase
       .from("usuario_dispositivos")
-      .select("id, ip, n_acessos")
+      .select("id, ip, n_acessos, geo_cidade, geo_uf, geo_pais, geo_lat, geo_lng")
       .eq("user_id", user.id)
       .eq("device_id", deviceId)
       .maybeSingle();
@@ -67,9 +80,23 @@ export async function POST(req: NextRequest) {
         user_agent: ua,
         ip,
         status: "pendente",
+        geo_cidade: geo.cidade,
+        geo_uf: geo.uf,
+        geo_pais: geo.pais,
+        geo_lat: geo.lat,
+        geo_lng: geo.lng,
       });
     } else {
-      if (existente.ip !== ip) geo = await geoDeIp(ip);
+      const mudouIp = existente.ip !== ip;
+      if (mudouIp) geo = await geoDeIp(ip);
+      else
+        geo = {
+          cidade: existente.geo_cidade ?? null,
+          uf: existente.geo_uf ?? null,
+          pais: existente.geo_pais ?? null,
+          lat: existente.geo_lat ?? null,
+          lng: existente.geo_lng ?? null,
+        };
       await supabase
         .from("usuario_dispositivos")
         .update({
@@ -77,6 +104,15 @@ export async function POST(req: NextRequest) {
           n_acessos: (existente.n_acessos ?? 0) + 1,
           ip,
           user_agent: ua,
+          ...(mudouIp
+            ? {
+                geo_cidade: geo.cidade,
+                geo_uf: geo.uf,
+                geo_pais: geo.pais,
+                geo_lat: geo.lat,
+                geo_lng: geo.lng,
+              }
+            : {}),
         })
         .eq("id", existente.id);
     }
@@ -95,6 +131,8 @@ export async function POST(req: NextRequest) {
     geo_cidade: geo.cidade,
     geo_uf: geo.uf,
     geo_pais: geo.pais,
+    geo_lat: geo.lat,
+    geo_lng: geo.lng,
   });
 
   return NextResponse.json({ ok: true });

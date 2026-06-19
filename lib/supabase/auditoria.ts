@@ -14,6 +14,9 @@ export interface AcessoLog {
   geo_cidade: string | null;
   geo_uf: string | null;
   geo_pais: string | null;
+  geo_lat: number | null;
+  geo_lng: number | null;
+  user_agent: string | null;
   criado_em: string;
 }
 
@@ -28,6 +31,12 @@ export interface Dispositivo {
   n_acessos: number;
   primeiro_acesso: string;
   ultimo_acesso: string;
+  geo_cidade: string | null;
+  geo_uf: string | null;
+  geo_pais: string | null;
+  geo_lat: number | null;
+  geo_lng: number | null;
+  email?: string | null;
 }
 
 export async function getAcessosRecentes(limite = 200): Promise<AcessoLog[]> {
@@ -56,7 +65,20 @@ export async function getDispositivos(): Promise<Dispositivo[]> {
     if ((error as { code?: string }).code === "42P01") return [];
     throw error;
   }
-  return (data as Dispositivo[]) ?? [];
+  const lista = (data as Dispositivo[]) ?? [];
+  // Resolve o e-mail/nome do dono (app_usuarios) para exibição.
+  const ids = [...new Set(lista.map((d) => d.user_id).filter(Boolean))];
+  if (ids.length) {
+    const { data: us } = await s.from("app_usuarios").select("id, nome, email").in("id", ids);
+    const mapa = new Map(
+      (us ?? []).map((u: { id: string; nome: string | null; email: string | null }) => [
+        u.id,
+        u.nome || u.email,
+      ])
+    );
+    for (const d of lista) d.email = mapa.get(d.user_id) ?? null;
+  }
+  return lista;
 }
 
 export async function setStatusDispositivo(

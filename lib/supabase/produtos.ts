@@ -142,6 +142,18 @@ export async function addAlias(produtoId: string, nome: string): Promise<void> {
   await updateProduto(produtoId, { aliases });
 }
 
+/** Remove um nome vinculado (alias) de um produto — desfaz a mesclagem daquele nome. */
+export async function removeAlias(produtoId: string, nome: string): Promise<void> {
+  const prod = isSupabaseConfigured()
+    ? (await getProdutos()).find((p) => p.id === produtoId)
+    : localGet<Produto>("produtos", produtoId);
+  if (!prod) return;
+  const aliases = (prod.aliases ?? []).filter(
+    (a) => a.toLowerCase() !== nome.trim().toLowerCase()
+  );
+  await updateProduto(produtoId, { aliases });
+}
+
 /** Mescla o produto source no target: nome e aliases viram aliases do target. */
 export async function mergeProdutos(
   sourceId: string,

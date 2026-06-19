@@ -94,6 +94,7 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
       { count: "exact" }
     )
     .order("data_emissao", { ascending: false })
+    .order("numero_nf", { ascending: false }) // 2º critério: número (desc)
     .range(page * pageSize, page * pageSize + pageSize - 1);
 
   if (filters.emissor_id) query = query.eq("emissor_id", filters.emissor_id);

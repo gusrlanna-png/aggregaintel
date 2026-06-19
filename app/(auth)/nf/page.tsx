@@ -120,6 +120,7 @@ export default function NFListPage() {
         data_inicio: di || undefined,
         data_fim: df || undefined,
         busca: buscaQ || undefined,
+        pageSize: 2000,
       }),
   });
 
@@ -134,8 +135,12 @@ export default function NFListPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Notas Fiscais</h1>
           <p className="text-sm text-muted-foreground">
-            {data ? `${rows.length} NF(s)` : "Carregando…"} · duplo clique para
-            editar
+            {data
+              ? rows.length === (data.count ?? rows.length)
+                ? `${rows.length} NF(s)`
+                : `${rows.length} de ${data.count} NF(s)`
+              : "Carregando…"}{" "}
+            · duplo clique para editar
           </p>
         </div>
         <Link
@@ -315,12 +320,32 @@ export default function NFListPage() {
                         )}
                       </TableCell>
                       <TableCell className="hidden max-w-[160px] truncate sm:table-cell">
-                        {nf.emissor?.razao_social ?? "—"}
+                        {nf.emissor_id ? (
+                          <Link
+                            href={`/concorrentes/${nf.emissor_id}`}
+                            className="hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Abrir cadastro do produtor"
+                          >
+                            {nf.emissor?.razao_social ?? "—"}
+                          </Link>
+                        ) : (
+                          nf.emissor?.razao_social ?? "—"
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {nf.data_emissao}
                       </TableCell>
-                      <TableCell>{labelProduto(nf.produto_tipo)}</TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/produtos?q=${encodeURIComponent(nf.produto_desc ?? labelProduto(nf.produto_tipo))}`}
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Abrir catálogo / vínculo de produtos"
+                        >
+                          {labelProduto(nf.produto_tipo)}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {fmtToneladas1(nf.quantidade_ton)}
                       </TableCell>

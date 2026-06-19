@@ -9,12 +9,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { getFontes, setFonteAtiva, sincronizarFonte, type Fonte } from "@/lib/supabase/fontes";
+import {
+  getFontes,
+  setFonteAtiva,
+  sincronizarFonte,
+  sincronizarClientesFonte,
+  type Fonte,
+} from "@/lib/supabase/fontes";
 
 export default function FontesPage() {
   const qc = useQueryClient();
   const { data: fontes = [], isLoading } = useQuery({ queryKey: ["fontes"], queryFn: getFontes });
   const [sincronizando, setSincronizando] = React.useState<string | null>(null);
+  const [sincClientes, setSincClientes] = React.useState<string | null>(null);
 
   async function sincronizar(f: Fonte) {
     setSincronizando(f.id);
@@ -26,6 +33,22 @@ export default function FontesPage() {
       toast.error(e instanceof Error ? e.message : "Erro na sincronização.");
     } finally {
       setSincronizando(null);
+    }
+  }
+
+  async function sincronizarClientes(f: Fonte) {
+    setSincClientes(f.id);
+    try {
+      const r = await sincronizarClientesFonte(f.id);
+      qc.invalidateQueries({ queryKey: ["fontes"] });
+      toast.success(
+        `Clientes: ${r.clientes_criados ?? 0} novo(s), ${r.clientes_atualizados ?? 0} atualizado(s). ` +
+          `Obras/usinas: ${r.enderecos_criados ?? 0} nova(s), ${r.enderecos_atualizados ?? 0} atualizada(s).`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro na sincronização de clientes.");
+    } finally {
+      setSincClientes(null);
     }
   }
 
@@ -77,16 +100,36 @@ export default function FontesPage() {
               </p>
               {f.ultimo_resultado && (
                 <p className="text-xs">
-                  Última sync: <strong>{f.ultimo_resultado.criadas ?? 0}</strong> novas ·{" "}
+                  NFs: <strong>{f.ultimo_resultado.criadas ?? 0}</strong> novas ·{" "}
                   <strong>{f.ultimo_resultado.atualizadas ?? 0}</strong> atualizadas ·{" "}
                   {f.ultimo_resultado.erros ?? 0} erros
                   {f.ultima_sync ? ` · ${new Date(f.ultima_sync).toLocaleString("pt-BR")}` : ""}
                 </p>
               )}
-              <Button size="sm" onClick={() => sincronizar(f)} disabled={sincronizando === f.id || !f.ativo}>
-                {sincronizando === f.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Sincronizar agora
-              </Button>
+              {f.ultimo_resultado_clientes && (
+                <p className="text-xs">
+                  Clientes: <strong>{f.ultimo_resultado_clientes.clientes_criados ?? 0}</strong> novos ·{" "}
+                  <strong>{f.ultimo_resultado_clientes.clientes_atualizados ?? 0}</strong> atualizados ·{" "}
+                  Obras: <strong>{f.ultimo_resultado_clientes.enderecos_criados ?? 0}</strong> novas ·{" "}
+                  <strong>{f.ultimo_resultado_clientes.enderecos_atualizados ?? 0}</strong> atualizadas
+                  {f.ultima_sync_clientes ? ` · ${new Date(f.ultima_sync_clientes).toLocaleString("pt-BR")}` : ""}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => sincronizar(f)} disabled={sincronizando === f.id || !f.ativo}>
+                  {sincronizando === f.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Sincronizar NFs
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => sincronizarClientes(f)}
+                  disabled={sincClientes === f.id || !f.ativo}
+                >
+                  {sincClientes === f.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Sincronizar clientes + obras
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))

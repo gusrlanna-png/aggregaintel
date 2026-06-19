@@ -21,17 +21,27 @@ export interface GraphMessagesResponse {
 
 /**
  * Busca e-mails enviados/recebidos com um endereço via Microsoft Graph.
- * Usa KQL search (participantes = remetente ou destinatário).
+ * Usa KQL search (participantes = remetente ou destinatário). O `termo`
+ * opcional restringe por palavra no ASSUNTO ou no CORPO (KQL full-text).
+ * SEGURANÇA: consulta sempre /me (caixa do próprio usuário logado); um
+ * usuário nunca lê a caixa de outro por aqui.
  */
 export async function fetchEmailsByContact(
   providerToken: string,
   email: string,
-  limit = 20
+  limit = 25,
+  termo?: string
 ): Promise<GraphMessage[]> {
+  // KQL: participante = e-mail do contato; e, se houver, o termo livre
+  // (o Graph busca em assunto + corpo). Aspas removidas para não quebrar a query.
+  const t = (termo ?? "").replace(/"/g, "").trim();
+  const search = t
+    ? `"participants:${email}" AND "${t}"`
+    : `"participants:${email}"`;
   // IMPORTANTE: o Graph NÃO aceita $orderby junto com $search (erro 400
   // SearchWithOrderBy). Buscamos por relevância e ordenamos por data no cliente.
   const params = new URLSearchParams({
-    $search: `"participants:${email}"`,
+    $search: search,
     $top: String(limit),
     $select:
       "id,subject,bodyPreview,receivedDateTime,isRead,isDraft,from,toRecipients,webLink",
@@ -56,6 +66,38 @@ export async function fetchEmailsByContact(
   return (json.value ?? []).sort((a, b) =>
     (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? "")
   );
+}
+
+export interface GraphMessageBody {
+  id: string;
+  subject: string | null;
+  receivedDateTime: string;
+  from: { emailAddress: { name: string; address: string } } | null;
+  toRecipients: { emailAddress: { name: string; address: string } }[];
+  webLink: string;
+  body: { contentType: "html" | "text"; content: string };
+}
+
+/**
+ * Lê o conteúdo completo de UM e-mail (assunto + corpo) para exibir dentro do
+ * sistema, sem ir ao Outlook. Sempre via /me (caixa do usuário logado).
+ */
+export async function fetchEmailBody(
+  providerToken: string,
+  id: string
+): Promise<GraphMessageBody> {
+  const params = new URLSearchParams({
+    $select: "id,subject,receivedDateTime,from,toRecipients,webLink,body",
+  });
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?${params}`,
+    { headers: { Authorization: `Bearer ${providerToken}` } }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Graph Mail error ${res.status}: ${text}`);
+  }
+  return (await res.json()) as GraphMessageBody;
 }
 
 /** Formata data de e-mail para exibição compacta. */

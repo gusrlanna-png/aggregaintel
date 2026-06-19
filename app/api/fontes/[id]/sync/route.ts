@@ -177,6 +177,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: e instanceof Error ? e.message : "Falha na sincronização." }, { status: 502 });
   }
 
+  // Liga as NFs às obras de entrega (por bairro) após importar.
+  await supabase.rpc("vincular_nf_obras");
+
   const resultado = { total, criadas, atualizadas, erros, em: new Date().toISOString() };
   await supabase.from("fontes_dados").update({ ultima_sync: resultado.em, ultimo_resultado: resultado }).eq("id", fonte.id);
   return NextResponse.json(resultado);

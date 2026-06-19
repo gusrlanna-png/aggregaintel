@@ -272,6 +272,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const { error } = await supabase.from("cliente_enderecos").insert(fatia);
       if (error) { out.enderecos_erros += fatia.length; out.enderecos_criados -= fatia.length; }
     }
+
+    // Religa NFs às obras agora que os endereços estão atualizados.
+    await supabase.rpc("vincular_nf_obras");
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Falha na sincronização.", parcial: out },

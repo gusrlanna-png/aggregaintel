@@ -125,9 +125,18 @@ export interface NotaFiscal {
   motorista_cpf: string | null;
   pedido_ref: string | null;
   criado_em: string;
+  endereco_id?: string | null;
+  end_entrega?: string | null;
   // joins opcionais
   emissor?: Pick<Emissor, "id" | "razao_social" | "municipio"> | null;
   cliente?: Pick<Cliente, "id" | "razao_social" | "segmento"> | null;
+  endereco?: {
+    id: string;
+    nome: string | null;
+    bairro: string | null;
+    municipio: string | null;
+    uf: string | null;
+  } | null;
 }
 
 export interface NFSerie {

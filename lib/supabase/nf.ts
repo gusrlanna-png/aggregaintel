@@ -135,7 +135,7 @@ export async function getNFById(id: string): Promise<NotaFiscal | null> {
   const { data, error } = await supabase
     .from("notas_fiscais")
     .select(
-      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)"
+      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento), endereco:cliente_enderecos(id, nome, bairro, municipio, uf)"
     )
     .eq("id", id)
     .maybeSingle();

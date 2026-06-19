@@ -207,6 +207,18 @@ export default function NFDetailPage() {
               <Row label="Emissor" value={n.emissor?.razao_social} />
               <Row label="Município emissor" value={n.emissor?.municipio} />
               <Row label="Cliente" value={n.cliente?.razao_social} />
+              <Row label="Endereço de entrega" value={n.end_entrega} />
+              {n.endereco && (
+                <Row
+                  label="Obra / usina"
+                  value={[
+                    n.endereco.nome,
+                    [n.endereco.bairro, n.endereco.municipio].filter(Boolean).join(" · "),
+                  ]
+                    .filter(Boolean)
+                    .join(" — ")}
+                />
+              )}
               <Row label="CFOP" value={n.cfop} />
               <Row label="Natureza" value={n.natureza_op} />
             </CardContent>

@@ -94,3 +94,24 @@ export async function buscarEmailIndice(
   }
   return lista;
 }
+
+export interface Correspondente {
+  email: string;
+  nome: string | null;
+  n: number;
+  ultima: string | null;
+}
+
+/** Correspondentes extraídos do índice (RPC respeita RLS: usuário/admin). */
+export async function getCorrespondentes(): Promise<Correspondente[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s.rpc("email_correspondentes");
+  if (error) {
+    if ((error as { code?: string }).code === "42883") return [];
+    throw error;
+  }
+  return ((data as { email: string; nome: string | null; n: number; ultima: string | null }[]) ?? []).map(
+    (r) => ({ email: r.email, nome: r.nome, n: Number(r.n), ultima: r.ultima })
+  );
+}

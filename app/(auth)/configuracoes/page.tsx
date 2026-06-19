@@ -126,6 +126,13 @@ const ITENS: ConfigItem[] = [
       "Define quais seções cada perfil acessa (menu + bloqueio de páginas). admin/gestor têm acesso total. Apenas administradores.",
   },
   {
+    href: "/configuracoes/fontes",
+    icon: Database,
+    titulo: "Fontes de dados",
+    descricao:
+      "Bancos/planilhas externos (NFs Martins Lanna/MBV/TCL e outros) que alimentam o sistema. Habilite e sincronize as importações.",
+  },
+  {
     href: "/configuracoes/auditoria",
     icon: ShieldCheck,
     titulo: "Auditoria e acessos",

@@ -32,15 +32,13 @@ import {
 } from "@/lib/supabase/pessoas";
 import { enqueueJob } from "@/lib/jobs/client";
 
+// Dados de identificação no topo. Endereço (logradouro/município/UF/CEP) saiu
+// daqui e passou a viver no card "Endereços" (pessoa_enderecos).
 const CAMPOS: { k: keyof Pessoa; label: string; type?: string }[] = [
   { k: "cpf", label: "CPF" },
   { k: "email", label: "E-mail principal" },
   { k: "fone", label: "Telefone principal" },
   { k: "aniversario", label: "Aniversário", type: "date" },
-  { k: "logradouro", label: "Endereço principal" },
-  { k: "municipio", label: "Município" },
-  { k: "uf", label: "UF" },
-  { k: "cep", label: "CEP" },
 ];
 
 export default function PessoaDetailPage() {

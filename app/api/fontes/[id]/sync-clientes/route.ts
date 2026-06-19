@@ -109,6 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     interface EmpRow {
       id: string;
       cnpj: string | null;
+      cpf: string | null;
       razao_social: string | null;
       fantasia: string | null;
       fone: string | null;
@@ -130,14 +131,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const { data, error } = await supabase
           .from("empresas")
           .select(
-            "id, cnpj, razao_social, fantasia, fone, email, bairro, municipio, uf, lat, lng, segmento, segmento_origem, grupo_economico"
+            "id, cnpj, cpf, razao_social, fantasia, fone, email, bairro, municipio, uf, lat, lng, segmento, segmento_origem, grupo_economico"
           )
           .range(from, from + passo - 1);
         if (error) throw error;
         const rows = (data as EmpRow[]) ?? [];
         for (const r of rows) {
-          const d = (r.cnpj ?? "").replace(/\D/g, "");
-          if (d.length >= 11) porCnpj.set(d, r);
+          // Indexa por CNPJ e por CPF (PF tem cnpj nulo e cpf preenchido).
+          const dCnpj = (r.cnpj ?? "").replace(/\D/g, "");
+          const dCpf = (r.cpf ?? "").replace(/\D/g, "");
+          if (dCnpj.length >= 11) porCnpj.set(dCnpj, r);
+          if (dCpf.length === 11) porCnpj.set(dCpf, r);
         }
         if (rows.length < passo) break;
         from += passo;
@@ -176,7 +180,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         cliente_fonte_raw: r,
       };
       if (ex) updMap.set(ex.id, { id: ex.id, ...merge });
-      else insMap.set(d, { cnpj: d, ...merge });
+      // PF (11 dígitos) entra no campo cpf; PJ (14) no cnpj — mantém o padrão.
+      else insMap.set(d, { ...(d.length === 11 ? { cpf: d } : { cnpj: d }), ...merge });
     }
     const updates = [...updMap.values()];
     const inserts = [...insMap.values()];
@@ -190,15 +195,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const { data, error } = await supabase
         .from("empresas")
         .insert(fatia)
-        .select("id, cnpj");
+        .select("id, cnpj, cpf");
       if (error) {
         out.clientes_erros += fatia.length;
         out.clientes_criados -= fatia.length;
         continue;
       }
-      for (const e of (data as { id: string; cnpj: string | null }[]) ?? []) {
-        const d = (e.cnpj ?? "").replace(/\D/g, "");
-        if (d) porCnpj.set(d, { id: e.id } as EmpRow);
+      for (const e of (data as { id: string; cnpj: string | null; cpf: string | null }[]) ?? []) {
+        const dCnpj = (e.cnpj ?? "").replace(/\D/g, "");
+        const dCpf = (e.cpf ?? "").replace(/\D/g, "");
+        if (dCnpj) porCnpj.set(dCnpj, { id: e.id } as EmpRow);
+        if (dCpf) porCnpj.set(dCpf, { id: e.id } as EmpRow);
       }
     }
 

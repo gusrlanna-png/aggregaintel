@@ -28,12 +28,13 @@ export async function fetchEmailsByContact(
   email: string,
   limit = 20
 ): Promise<GraphMessage[]> {
+  // IMPORTANTE: o Graph NÃO aceita $orderby junto com $search (erro 400
+  // SearchWithOrderBy). Buscamos por relevância e ordenamos por data no cliente.
   const params = new URLSearchParams({
     $search: `"participants:${email}"`,
     $top: String(limit),
     $select:
       "id,subject,bodyPreview,receivedDateTime,isRead,isDraft,from,toRecipients,webLink",
-    $orderby: "receivedDateTime desc",
   });
 
   const res = await fetch(
@@ -52,7 +53,9 @@ export async function fetchEmailsByContact(
   }
 
   const json = (await res.json()) as GraphMessagesResponse;
-  return json.value ?? [];
+  return (json.value ?? []).sort((a, b) =>
+    (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? "")
+  );
 }
 
 /** Formata data de e-mail para exibição compacta. */

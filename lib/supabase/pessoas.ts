@@ -673,6 +673,100 @@ export async function getPessoasDuplicadas(): Promise<GrupoPessoaDuplicada[]> {
     .sort((a, b) => b.membros.length - a.membros.length);
 }
 
+// ── Matching de pessoas (e-mail, telefone, nome completo/parcial) ─────────────
+
+const normNome = (n: string) =>
+  (n ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+const soDig = (v: string) => (v ?? "").replace(/\D/g, "");
+/** Compara telefones pelos últimos 8 dígitos (ignora DDI/DDD divergentes). */
+const foneKey = (v: string) => {
+  const d = soDig(v);
+  return d.length >= 8 ? d.slice(-8) : "";
+};
+const STOP = new Set(["de", "da", "do", "dos", "das", "e", "junior", "jr", "neto", "filho"]);
+
+export interface IndicePessoas {
+  byEmail: Map<string, { id: string; nome: string }>;
+  byFone: Map<string, { id: string; nome: string }>;
+  byNome: Map<string, { id: string; nome: string }>;
+  todos: { id: string; nome: string; tokens: string[] }[];
+}
+
+/** Monta um índice das pessoas (e seus e-mails/telefones extras) para matching. */
+export async function getIndicePessoas(): Promise<IndicePessoas> {
+  const idx: IndicePessoas = {
+    byEmail: new Map(),
+    byFone: new Map(),
+    byNome: new Map(),
+    todos: [],
+  };
+  if (!isSupabaseConfigured()) return idx;
+  const s = createClient();
+  const [pes, emails, fones] = await Promise.all([
+    s.from("pessoas").select("id, nome, email, fone"),
+    s.from("pessoa_emails").select("pessoa_id, email"),
+    s.from("pessoa_telefones").select("pessoa_id, numero"),
+  ]);
+  const nomeDe = new Map<string, string>();
+  for (const p of (pes.data as { id: string; nome: string; email: string | null; fone: string | null }[] | null) ?? []) {
+    nomeDe.set(p.id, p.nome);
+    const ref = { id: p.id, nome: p.nome };
+    if (p.email) idx.byEmail.set(p.email.trim().toLowerCase(), ref);
+    if (p.fone && foneKey(p.fone)) idx.byFone.set(foneKey(p.fone), ref);
+    const nn = normNome(p.nome);
+    if (nn) idx.byNome.set(nn, ref);
+    idx.todos.push({ id: p.id, nome: p.nome, tokens: nn.split(" ").filter((t) => t.length > 2 && !STOP.has(t)) });
+  }
+  for (const e of (emails.data as { pessoa_id: string; email: string }[] | null) ?? []) {
+    if (e.email) idx.byEmail.set(e.email.trim().toLowerCase(), { id: e.pessoa_id, nome: nomeDe.get(e.pessoa_id) ?? "" });
+  }
+  for (const f of (fones.data as { pessoa_id: string; numero: string }[] | null) ?? []) {
+    const k = foneKey(f.numero);
+    if (k) idx.byFone.set(k, { id: f.pessoa_id, nome: nomeDe.get(f.pessoa_id) ?? "" });
+  }
+  return idx;
+}
+
+export type MatchTipo = "existe" | "duplicata" | "novo";
+export interface MatchPessoa {
+  tipo: MatchTipo;
+  pessoaId?: string;
+  pessoaNome?: string;
+  motivo?: string;
+}
+
+/** Casa um contato com o índice: e-mail/telefone/nome exatos = existe; nome
+ *  parcial (todos os tokens contidos) = possível duplicata; senão = novo. */
+export function casarContato(
+  c: { nome: string; emails?: string[]; fones?: string[] },
+  idx: IndicePessoas
+): MatchPessoa {
+  for (const e of c.emails ?? []) {
+    const m = idx.byEmail.get((e ?? "").trim().toLowerCase());
+    if (m) return { tipo: "existe", pessoaId: m.id, pessoaNome: m.nome, motivo: "e-mail igual" };
+  }
+  for (const f of c.fones ?? []) {
+    const m = idx.byFone.get(foneKey(f));
+    if (foneKey(f) && m) return { tipo: "existe", pessoaId: m.id, pessoaNome: m.nome, motivo: "telefone igual" };
+  }
+  const nn = normNome(c.nome);
+  const exato = idx.byNome.get(nn);
+  if (exato) return { tipo: "existe", pessoaId: exato.id, pessoaNome: exato.nome, motivo: "nome igual" };
+  // Nome parcial: todos os tokens (>2) do contato presentes numa pessoa (ou vice-versa).
+  const toks = nn.split(" ").filter((t) => t.length > 2 && !STOP.has(t));
+  if (toks.length >= 2) {
+    for (const p of idx.todos) {
+      if (p.tokens.length < 2) continue;
+      const contidoA = toks.every((t) => p.tokens.includes(t));
+      const contidoB = p.tokens.every((t) => toks.includes(t));
+      if (contidoA || contidoB) {
+        return { tipo: "duplicata", pessoaId: p.id, pessoaNome: p.nome, motivo: "nome parcial" };
+      }
+    }
+  }
+  return { tipo: "novo" };
+}
+
 /**
  * Importa contatos (de CSV) com De→Para por nome normalizado: contatos já
  * existentes são pulados (dedup); novos viram pessoas, com telefones/e-mails.

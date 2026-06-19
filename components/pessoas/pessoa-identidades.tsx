@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, Loader2, Plus, Trash2, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronRight, Fingerprint, Loader2, Plus, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ export function PessoaIdentidades({ pessoaId }: { pessoaId: string }) {
   const [externalId, setExternalId] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [salvando, setSalvando] = React.useState(false);
+  const [expandido, setExpandido] = React.useState<string | null>(null);
 
   async function adicionar() {
     if (!handle.trim() && !externalId.trim() && !url.trim()) {
@@ -83,38 +84,60 @@ export function PessoaIdentidades({ pessoaId }: { pessoaId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Cada origem guarda <strong>de onde veio</strong> (fonte), o <strong>ID original</strong> e
+          <strong> quem/qual conta</strong> vinculou — base para devolver/unificar o contato no Outlook
+          de cada usuário no futuro. Clique para expandir.
+        </p>
         {idents.length > 0 && (
           <div className="divide-y rounded-md border">
-            {idents.map((it) => (
-              <div key={it.id} className="flex items-center gap-2 p-2 text-sm">
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
-                  {FONTES_IDENTIDADE[it.fonte] ?? it.fonte}
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  {it.handle || it.external_id || it.url || "—"}
-                </span>
-                {it.url && (
-                  <a
-                    href={it.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-muted-foreground hover:text-primary"
-                    aria-label="Abrir"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-destructive"
-                  onClick={() => remover(it.id)}
-                  aria-label="Remover"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+            {idents.map((it) => {
+              const aberto = expandido === it.id;
+              return (
+                <div key={it.id} className="text-sm">
+                  <div className="flex items-center gap-2 p-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandido(aberto ? null : it.id)}
+                      className="shrink-0 text-muted-foreground"
+                      aria-label={aberto ? "Recolher" : "Expandir"}
+                    >
+                      {aberto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
+                      {FONTES_IDENTIDADE[it.fonte] ?? it.fonte}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {it.handle || it.external_id || it.url || "—"}
+                    </span>
+                    {it.url && (
+                      <a href={it.url} target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 text-muted-foreground hover:text-primary" aria-label="Abrir">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive"
+                      onClick={() => remover(it.id)} aria-label="Remover">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {aberto && (
+                    <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 border-t bg-muted/30 px-3 py-2 text-xs">
+                      <dt className="text-muted-foreground">Fonte</dt>
+                      <dd>{FONTES_IDENTIDADE[it.fonte] ?? it.fonte}</dd>
+                      <dt className="text-muted-foreground">ID na origem</dt>
+                      <dd className="break-all">{it.external_id || "—"}</dd>
+                      <dt className="text-muted-foreground">Conta de origem</dt>
+                      <dd className="break-all">{it.conta_origem || "—"}</dd>
+                      <dt className="text-muted-foreground">Vinculado por</dt>
+                      <dd>{it.criado_por_nome || "—"}</dd>
+                      <dt className="text-muted-foreground">Data</dt>
+                      <dd>{new Date(it.criado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</dd>
+                    </dl>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

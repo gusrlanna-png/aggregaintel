@@ -568,6 +568,9 @@ export interface PessoaIdentidade {
   external_id: string | null;
   handle: string | null;
   url: string | null;
+  conta_origem: string | null;
+  criado_por: string | null;
+  criado_por_nome?: string | null;
   criado_em: string;
 }
 
@@ -588,19 +591,27 @@ export async function getPessoaIdentidades(pessoaId: string): Promise<PessoaIden
   const s = createClient();
   const { data, error } = await s
     .from("pessoa_identidades")
-    .select("id, pessoa_id, fonte, external_id, handle, url, criado_em")
+    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, criado_em")
     .eq("pessoa_id", pessoaId)
     .order("criado_em");
   if (error) {
     if ((error as { code?: string }).code === "42P01") return [];
     throw error;
   }
-  return (data as PessoaIdentidade[]) ?? [];
+  const lista = (data as PessoaIdentidade[]) ?? [];
+  // Resolve o nome de quem vinculou (app_usuarios) para exibição.
+  const ids = [...new Set(lista.map((i) => i.criado_por).filter(Boolean))] as string[];
+  if (ids.length) {
+    const { data: us } = await s.from("app_usuarios").select("id, nome, email").in("id", ids);
+    const mapa = new Map((us ?? []).map((u: { id: string; nome: string | null; email: string | null }) => [u.id, u.nome || u.email]));
+    for (const i of lista) i.criado_por_nome = i.criado_por ? mapa.get(i.criado_por) ?? null : null;
+  }
+  return lista;
 }
 
 export async function addPessoaIdentidade(
   pessoaId: string,
-  dados: { fonte: string; external_id?: string | null; handle?: string | null; url?: string | null }
+  dados: { fonte: string; external_id?: string | null; handle?: string | null; url?: string | null; conta_origem?: string | null }
 ): Promise<PessoaIdentidade> {
   if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
   const s = createClient();
@@ -612,11 +623,55 @@ export async function addPessoaIdentidade(
       external_id: dados.external_id || null,
       handle: dados.handle || null,
       url: dados.url || null,
+      conta_origem: dados.conta_origem || null,
     })
-    .select("id, pessoa_id, fonte, external_id, handle, url, criado_em")
+    .select("id, pessoa_id, fonte, external_id, handle, url, conta_origem, criado_por, criado_em")
     .single();
   if (error) throw error;
   return data as PessoaIdentidade;
+}
+
+/**
+ * Traz os dados de um contato (e-mails/telefones) para uma pessoa existente, sem
+ * duplicar: adiciona os que faltam em pessoa_emails/pessoa_telefones e preenche
+ * o e-mail/telefone principal se estiverem vazios. Usado ao VINCULAR contatos.
+ */
+export async function adicionarDadosContato(
+  pessoaId: string,
+  dados: { emails?: string[]; fones?: string[] }
+): Promise<{ emails: number; fones: number }> {
+  if (!isSupabaseConfigured()) return { emails: 0, fones: 0 };
+  const s = createClient();
+  const emails = [...new Set((dados.emails ?? []).map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e)))];
+  const fones = [...new Set((dados.fones ?? []).map((f) => f.trim()).filter((f) => f.replace(/\D/g, "").length >= 8))];
+
+  const [{ data: exEmails }, { data: exFones }, { data: pe }] = await Promise.all([
+    s.from("pessoa_emails").select("email").eq("pessoa_id", pessoaId),
+    s.from("pessoa_telefones").select("numero").eq("pessoa_id", pessoaId),
+    s.from("pessoas").select("email, fone").eq("id", pessoaId).maybeSingle(),
+  ]);
+  const jaEmails = new Set((exEmails ?? []).map((r: { email: string }) => r.email.trim().toLowerCase()));
+  if (pe?.email) jaEmails.add(pe.email.trim().toLowerCase());
+  const jaFones = new Set((exFones ?? []).map((r: { numero: string }) => r.numero.replace(/\D/g, "")));
+  if (pe?.fone) jaFones.add(pe.fone.replace(/\D/g, ""));
+
+  let nE = 0, nF = 0;
+  for (const e of emails) {
+    if (jaEmails.has(e)) continue;
+    try { await addPessoaEmail(pessoaId, { email: e }); nE++; jaEmails.add(e); } catch {/* ignora */}
+  }
+  for (const f of fones) {
+    if (jaFones.has(f.replace(/\D/g, ""))) continue;
+    try { await addPessoaTelefone(pessoaId, { tipo: "celular", numero: f }); nF++; jaFones.add(f.replace(/\D/g, "")); } catch {/* ignora */}
+  }
+  // Preenche principal vazio.
+  const patch: { email?: string; fone?: string } = {};
+  if (!pe?.email && emails[0]) patch.email = emails[0];
+  if (!pe?.fone && fones[0]) patch.fone = fones[0];
+  if (Object.keys(patch).length) {
+    try { await atualizarPessoa(pessoaId, patch); } catch {/* ignora */}
+  }
+  return { emails: nE, fones: nF };
 }
 
 export async function deletePessoaIdentidade(id: string): Promise<void> {

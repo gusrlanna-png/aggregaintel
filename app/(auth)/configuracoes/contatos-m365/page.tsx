@@ -32,6 +32,7 @@ import {
 } from "@/lib/graph/contacts";
 import {
   addPessoaIdentidade,
+  adicionarDadosContato,
   casarContato,
   criarPessoa,
   getIndicePessoas,
@@ -56,6 +57,7 @@ export default function ContatosM365Page() {
   const [indice, setIndice] = React.useState<IndicePessoas | null>(null);
   const [feitos, setFeitos] = React.useState<Record<string, "vinculado" | "criado">>({});
   const [conectado, setConectado] = React.useState<boolean | null>(null);
+  const [contaOrigem, setContaOrigem] = React.useState<string | null>(null);
   const [aba, setAba] = React.useState<Aba>("duplicatas");
   const [busca, setBusca] = React.useState("");
   const [expandido, setExpandido] = React.useState<string | null>(null);
@@ -83,6 +85,7 @@ export default function ContatosM365Page() {
       const [graph, idx] = await Promise.all([fetchOutlookContacts(token), getIndicePessoas()]);
       setContatos(graph);
       setIndice(idx);
+      setContaOrigem(sess.session?.user?.email ?? null);
       setFeitos({});
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao carregar contatos.");
@@ -134,15 +137,20 @@ export default function ContatosM365Page() {
         external_id: c.id,
         handle: c.displayName,
         url: email ? `mailto:${email}` : null,
+        conta_origem: contaOrigem,
       });
+      // Traz os dados do contato (e-mails/telefones) para o cadastro existente.
+      const r = await adicionarDadosContato(pessoaId, { emails: emailsDe(c), fones: fonesDe(c) });
       setFeitos((p) => ({ ...p, [c.id]: "vinculado" }));
       invalidar();
-      toast.success(`Vinculado a ${c.displayName}.`);
+      const add = r.emails + r.fones;
+      toast.success(`Vinculado a ${c.displayName}${add ? ` · ${add} dado(s) adicionado(s)` : ""}.`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (/duplicate|unique/i.test(msg)) {
+        try { await adicionarDadosContato(pessoaId, { emails: emailsDe(c), fones: fonesDe(c) }); } catch {}
         setFeitos((p) => ({ ...p, [c.id]: "vinculado" }));
-        toast.info("Já estava vinculado.");
+        toast.info("Já vinculado — dados conferidos.");
       } else toast.error(msg || "Erro ao vincular.");
     }
   }
@@ -163,8 +171,11 @@ export default function ContatosM365Page() {
           external_id: c.id,
           handle: c.displayName,
           url: email ? `mailto:${email}` : null,
+          conta_origem: contaOrigem,
         });
       } catch {/* identidade já existe */}
+      // Adiciona TODOS os e-mails/telefones do contato (não só o principal).
+      try { await adicionarDadosContato(id, { emails: emailsDe(c), fones: fonesDe(c) }); } catch {}
       setFeitos((p) => ({ ...p, [c.id]: "criado" }));
       invalidar();
       toast.success(`${c.displayName} importado.`);

@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+// Inter auto-hospedada (woff2 no repo) — evita falha de build por rede ao
+// buscar do Google Fonts na VPS.
+const inter = localFont({
+  src: "./fonts/inter-latin.woff2",
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   applicationName: "AggregaIntel",

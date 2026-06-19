@@ -8,7 +8,16 @@ export interface AppUsuario {
   email: string | null;
   perfil: Perfil;
   ativo: boolean;
+  aprovado_em: string | null;
   criado_em: string;
+}
+
+export type StatusAcesso = "pendente" | "ativo" | "bloqueado";
+
+/** Deriva o status de acesso de um usuário (pendente nunca foi aprovado). */
+export function statusUsuario(u: AppUsuario): StatusAcesso {
+  if (u.ativo) return "ativo";
+  return u.aprovado_em ? "bloqueado" : "pendente";
 }
 
 /** Perfil do usuário logado. Em modo demo (sem Supabase) libera tudo (admin). */
@@ -93,6 +102,35 @@ export async function atualizarUsuario(
   const { error } = await supabase
     .from("app_usuarios")
     .update({ ...patch, atualizado_em: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Aprova o acesso (ativa) e define o perfil; registra quem/quando aprovou. */
+export async function aprovarUsuario(id: string, perfil: Perfil): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("app_usuarios")
+    .update({
+      ativo: true,
+      perfil,
+      aprovado_em: new Date().toISOString(),
+      aprovado_por: user?.id ?? null,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Bloqueia o acesso (mantém o histórico de aprovação). */
+export async function bloquearUsuario(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("app_usuarios")
+    .update({ ativo: false, atualizado_em: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
 }

@@ -61,8 +61,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", base));
   }
 
-  // Controle de acesso por perfil (RBAC configurável no banco) — não bloqueia /api.
+  const ehPendente = pathname.startsWith("/acesso-pendente");
+
+  // Aprovação de acesso: usuário autenticado mas pendente/bloqueado vai para a
+  // tela de espera; quando aprovado, sai dela. (sem_cadastro = fail-open.)
   if (user && !isPublic && !pathname.startsWith("/api")) {
+    try {
+      const { data: status } = await supabase.rpc("meu_status");
+      if ((status === "pendente" || status === "bloqueado") && !ehPendente) {
+        return NextResponse.redirect(new URL("/acesso-pendente", base));
+      }
+      if (status === "ativo" && ehPendente) {
+        return NextResponse.redirect(new URL("/dashboard", base));
+      }
+    } catch {
+      /* erro transitório não derruba o usuário */
+    }
+  }
+
+  // Controle de acesso por perfil (RBAC configurável no banco) — não bloqueia
+  // /api nem a tela de espera.
+  if (user && !isPublic && !ehPendente && !pathname.startsWith("/api")) {
     try {
       const { data: pode, error } = await supabase.rpc("pode_ver_rota", {
         p_rota: pathname,

@@ -9,6 +9,7 @@ import {
   Code2,
   Database,
   Gift,
+  Mail,
   Merge,
   Package,
   ShieldCheck,
@@ -26,168 +27,221 @@ interface ConfigItem {
   descricao: string;
 }
 
-const ITENS: ConfigItem[] = [
+interface Grupo {
+  titulo: string;
+  descricao: string;
+  itens: ConfigItem[];
+}
+
+// Configurações agrupadas por área. Novos itens entram no grupo correspondente
+// (padrão a manter): Acessos, Microsoft 365, Dados/Importação, Limpeza,
+// Parâmetros do sistema, Automação.
+const GRUPOS: Grupo[] = [
   {
-    href: "/configuracoes/integracao",
-    icon: Database,
-    titulo: "Integração com o sistema",
-    descricao:
-      "Sincroniza clientes, produtos e propostas do sistema comercial (diário às 01:00 + sob demanda). Base da sazonalidade pelas vendas.",
+    titulo: "Acessos e segurança",
+    descricao: "Quem entra, o que cada um vê e o histórico de acessos.",
+    itens: [
+      {
+        href: "/configuracoes/usuarios",
+        icon: ShieldCheck,
+        titulo: "Usuários e acessos",
+        descricao:
+          "Aprove novos acessos, defina o perfil (admin/gestor/vendedor) e bloqueie. Apenas administradores.",
+      },
+      {
+        href: "/configuracoes/permissoes",
+        icon: ShieldCheck,
+        titulo: "Permissões por perfil",
+        descricao:
+          "Quais seções cada perfil acessa (menu + bloqueio de páginas). admin/gestor têm acesso total.",
+      },
+      {
+        href: "/configuracoes/auditoria",
+        icon: ShieldCheck,
+        titulo: "Auditoria e acessos",
+        descricao:
+          "Dispositivos (aprovar/bloquear) e histórico de acessos/ações com IP, localização e mapa. LGPD.",
+      },
+    ],
   },
   {
-    href: "/configuracoes/sazonalidade",
-    icon: SlidersHorizontal,
-    titulo: "Sazonalidade mensal",
-    descricao:
-      "Distribuição do volume anual por mês. Varia por ano e por segmento de cliente. Usada nas projeções.",
+    titulo: "Contatos e Microsoft 365",
+    descricao: "Contatos, e-mails e a integração com o Outlook/M365.",
+    itens: [
+      {
+        href: "/configuracoes/contatos-m365",
+        icon: Users,
+        titulo: "Contatos Microsoft 365",
+        descricao:
+          "Sincronize e concilie seus contatos do Outlook com o sistema. Requer login Microsoft corporativo.",
+      },
+      {
+        href: "/configuracoes/historico-contatos-m365",
+        icon: Users,
+        titulo: "Histórico de contatos M365",
+        descricao:
+          "Quem vinculou cada contato, de qual conta e quando, com os dados capturados. Histórico por usuário.",
+      },
+      {
+        href: "/configuracoes/emails",
+        icon: Mail,
+        titulo: "E-mails indexados (M365)",
+        descricao:
+          "Busca e extração (correspondentes) dos e-mails abertos. Cada um vê os seus; admin consolida. Só metadados.",
+      },
+      {
+        href: "/configuracoes/importar-contatos",
+        icon: Users,
+        titulo: "Importar contatos (CSV)",
+        descricao:
+          "Importa contatos de Google/celular (CSV) como pessoas, com telefones e e-mails. Ignora quem já existe.",
+      },
+    ],
   },
   {
-    href: "/configuracoes/dias-uteis",
-    icon: CalendarDays,
-    titulo: "Peso de dias / mês",
-    descricao:
-      "Peso de dia útil, sábado e domingo, feriados nacionais e extras. Define os dias úteis ponderados de cada mês.",
+    titulo: "Fontes e importação de dados",
+    descricao: "Origens externas que alimentam o sistema (NFs, clientes, BI).",
+    itens: [
+      {
+        href: "/configuracoes/fontes",
+        icon: Database,
+        titulo: "Fontes de dados",
+        descricao:
+          "Bancos/planilhas externos (NFs e clientes Martins Lanna/MBV/TCL). Habilite e sincronize as importações.",
+      },
+      {
+        href: "/configuracoes/integracao",
+        icon: Database,
+        titulo: "Integração com o sistema",
+        descricao:
+          "Sincroniza clientes, produtos e propostas do sistema comercial (diário 01:00 + sob demanda).",
+      },
+    ],
   },
   {
-    href: "/produtos",
-    icon: Package,
-    titulo: "Catálogo de produtos",
-    descricao:
-      "Produtos identificados nas NFs. Mescle nomes similares e padronize a classificação.",
+    titulo: "Limpeza de dados",
+    descricao: "Encontrar e mesclar cadastros repetidos.",
+    itens: [
+      {
+        href: "/configuracoes/clientes-duplicados",
+        icon: Merge,
+        titulo: "Clientes duplicados",
+        descricao:
+          "Encontra clientes repetidos pelo mesmo CNPJ e mescla, movendo NFs, visitas e contatos.",
+      },
+      {
+        href: "/configuracoes/pessoas-duplicadas",
+        icon: Merge,
+        titulo: "Pessoas duplicadas",
+        descricao:
+          "Encontra pessoas repetidas (mesmo CPF/nome) e mescla, movendo vínculos, identidades e sociedades.",
+      },
+    ],
   },
   {
-    href: "/configuracoes/usuarios",
-    icon: ShieldCheck,
-    titulo: "Usuários e permissões",
-    descricao:
-      "Perfis de acesso (admin, gestor, vendedor). Define o que cada pessoa enxerga. Apenas administradores.",
+    titulo: "Parâmetros do sistema",
+    descricao: "Tabelas e regras que alimentam projeções e categorização.",
+    itens: [
+      {
+        href: "/configuracoes/sazonalidade",
+        icon: SlidersHorizontal,
+        titulo: "Sazonalidade mensal",
+        descricao:
+          "Distribuição do volume anual por mês, por ano e segmento. Usada nas projeções.",
+      },
+      {
+        href: "/configuracoes/dias-uteis",
+        icon: CalendarDays,
+        titulo: "Peso de dias / mês",
+        descricao:
+          "Peso de dia útil, sábado, domingo e feriados. Define os dias úteis ponderados de cada mês.",
+      },
+      {
+        href: "/produtos",
+        icon: Package,
+        titulo: "Catálogo de produtos",
+        descricao:
+          "Produtos identificados nas NFs. Mescle nomes similares e padronize a classificação.",
+      },
+      {
+        href: "/configuracoes/carteiras",
+        icon: Briefcase,
+        titulo: "Carteiras de vendas",
+        descricao:
+          "Carteiras por segmento + região/porte → vendedor responsável. Prepara metas/comissionamento.",
+      },
+      {
+        href: "/configuracoes/brindes",
+        icon: Gift,
+        titulo: "Brindes",
+        descricao:
+          "Catálogo e estoque de brindes. A baixa acontece na entrega durante a visita.",
+      },
+    ],
   },
   {
-    href: "/configuracoes/agentes",
-    icon: Bot,
-    titulo: "Agentes e monitoramento",
-    descricao:
-      "Agentes automáticos (enriquecimento, cascata, importação). Ative/desative, defina regras e acompanhe o log de todas as ações executadas.",
-  },
-  {
-    href: "/configuracoes/desenvolvimento",
-    icon: Code2,
-    titulo: "Desenvolvimento",
-    descricao:
-      "Peça melhorias/correções: a IA gera análise crítica + plano. Aprove e o item entra no backlog de desenvolvimento. Também pelo chat 🤖.",
-  },
-  {
-    href: "/configuracoes/carteiras",
-    icon: Briefcase,
-    titulo: "Carteiras de vendas",
-    descricao:
-      "Carteiras por segmento + região/porte → vendedor responsável. Categoriza os clientes e prepara metas/comissionamento.",
-  },
-  {
-    href: "/configuracoes/brindes",
-    icon: Gift,
-    titulo: "Brindes",
-    descricao:
-      "Catálogo e estoque de brindes. A baixa acontece na entrega durante a visita (categoria Entrega de brindes).",
-  },
-  {
-    href: "/configuracoes/contatos-m365",
-    icon: Users,
-    titulo: "Contatos Microsoft 365",
-    descricao:
-      "Sincronize seus contatos do Outlook para o sistema. Requer login com conta Microsoft corporativa.",
-  },
-  {
-    href: "/configuracoes/emails",
-    icon: Users,
-    titulo: "E-mails indexados (M365)",
-    descricao:
-      "Busca em assunto, trecho e remetente dos e-mails abertos no sistema. Cada um vê os seus; admin tem a visão consolidada. Só metadados (LGPD).",
-  },
-  {
-    href: "/configuracoes/historico-contatos-m365",
-    icon: Users,
-    titulo: "Histórico de contatos M365",
-    descricao:
-      "Quem vinculou cada contato do Outlook, de qual conta e quando, com os dados capturados. Histórico por usuário.",
-  },
-  {
-    href: "/configuracoes/clientes-duplicados",
-    icon: Merge,
-    titulo: "Clientes duplicados",
-    descricao:
-      "Encontra cadastros de cliente repetidos pelo mesmo CNPJ e mescla num único registro, movendo NFs, visitas e contatos.",
-  },
-  {
-    href: "/configuracoes/pessoas-duplicadas",
-    icon: Merge,
-    titulo: "Pessoas duplicadas",
-    descricao:
-      "Encontra pessoas repetidas (mesmo CPF ou nome) e mescla num único cadastro, movendo vínculos, identidades e sociedades.",
-  },
-  {
-    href: "/configuracoes/importar-contatos",
-    icon: Users,
-    titulo: "Importar contatos (CSV)",
-    descricao:
-      "Importa contatos de Google Contacts / celular (CSV) como pessoas, com telefones e e-mails. Ignora quem já existe (De→Para por nome).",
-  },
-  {
-    href: "/configuracoes/permissoes",
-    icon: ShieldCheck,
-    titulo: "Permissões por perfil",
-    descricao:
-      "Define quais seções cada perfil acessa (menu + bloqueio de páginas). admin/gestor têm acesso total. Apenas administradores.",
-  },
-  {
-    href: "/configuracoes/fontes",
-    icon: Database,
-    titulo: "Fontes de dados",
-    descricao:
-      "Bancos/planilhas externos (NFs Martins Lanna/MBV/TCL e outros) que alimentam o sistema. Habilite e sincronize as importações.",
-  },
-  {
-    href: "/configuracoes/auditoria",
-    icon: ShieldCheck,
-    titulo: "Auditoria e acessos",
-    descricao:
-      "Dispositivos registrados (aprovar/bloquear) e histórico de acessos/ações com IP e localização. Base de segurança e LGPD. Apenas administradores.",
+    titulo: "Automação e desenvolvimento",
+    descricao: "Agentes automáticos e evolução do sistema.",
+    itens: [
+      {
+        href: "/configuracoes/agentes",
+        icon: Bot,
+        titulo: "Agentes e monitoramento",
+        descricao:
+          "Agentes automáticos (enriquecimento, cascata, importação). Ative/desative e acompanhe o log.",
+      },
+      {
+        href: "/configuracoes/desenvolvimento",
+        icon: Code2,
+        titulo: "Desenvolvimento",
+        descricao:
+          "Peça melhorias/correções: a IA gera análise + plano. Aprove e o item entra no backlog. Também pelo chat 🤖.",
+      },
+    ],
   },
 ];
 
 export default function ConfiguracoesPage() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold tracking-tight">Configurações</h1>
         <p className="text-sm text-muted-foreground">
-          Tabelas e parâmetros do sistema. Novas configurações aparecem aqui.
+          Organizadas por área. Novos itens entram no grupo correspondente.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {ITENS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link key={item.href} href={item.href}>
-              <Card className="transition-shadow hover:shadow-md">
-                <CardContent className="flex items-start gap-3 p-4">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{item.titulo}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.descricao}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
+      {GRUPOS.map((grupo) => (
+        <section key={grupo.titulo} className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {grupo.titulo}
+            </h2>
+            <p className="text-xs text-muted-foreground">{grupo.descricao}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {grupo.itens.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <Card className="h-full transition-shadow hover:shadow-md">
+                    <CardContent className="flex items-start gap-3 p-4">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{item.titulo}</p>
+                        <p className="text-xs text-muted-foreground">{item.descricao}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

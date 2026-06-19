@@ -19,6 +19,7 @@ import {
 import {
   buscarEmailIndice,
   getCorrespondentes,
+  getEmpresasPorDominio,
   type Correspondente,
 } from "@/lib/supabase/email-indice";
 import { getIndicePessoas, criarPessoa } from "@/lib/supabase/pessoas";
@@ -181,10 +182,21 @@ function Correspondentes() {
     queryKey: ["indice-pessoas"],
     queryFn: getIndicePessoas,
   });
+  const { data: dominios } = useQuery({
+    queryKey: ["empresas-por-dominio"],
+    queryFn: getEmpresasPorDominio,
+  });
 
   const pessoaDe = React.useCallback(
     (email: string) => indice?.byEmail.get(email.toLowerCase()) ?? null,
     [indice]
+  );
+  const empresaDe = React.useCallback(
+    (email: string) => {
+      const dom = email.split("@")[1]?.toLowerCase();
+      return dom ? dominios?.get(dom) ?? null : null;
+    },
+    [dominios]
   );
 
   const lista = React.useMemo(() => {
@@ -262,6 +274,19 @@ function Correspondentes() {
                       <p className="truncate text-xs text-muted-foreground">
                         {c.email} · {c.n} e-mail(s) · {fmt(c.ultima)}
                       </p>
+                      {(() => {
+                        const emp = empresaDe(c.email);
+                        return emp ? (
+                          <Link
+                            href={`/clientes/${emp.empresa_id}`}
+                            className="mt-0.5 inline-block truncate text-[11px] text-emerald-700 hover:underline dark:text-emerald-400"
+                            title="Empresa sugerida pelo domínio do e-mail"
+                          >
+                            🏢 {emp.razao_social ?? "Empresa"}
+                            {emp.n > 1 ? ` (+${emp.n - 1})` : ""}
+                          </Link>
+                        ) : null;
+                      })()}
                     </div>
                     {p ? (
                       <Link

@@ -102,6 +102,26 @@ export interface Correspondente {
   ultima: string | null;
 }
 
+export interface EmpresaDominio {
+  dominio: string;
+  empresa_id: string;
+  razao_social: string | null;
+  n: number;
+}
+
+/** Mapa domínio→empresa (RPC). Para casar correspondentes de e-mail com clientes. */
+export async function getEmpresasPorDominio(): Promise<Map<string, EmpresaDominio>> {
+  const m = new Map<string, EmpresaDominio>();
+  if (!isSupabaseConfigured()) return m;
+  const s = createClient();
+  const { data, error } = await s.rpc("empresas_por_dominio");
+  if (error) return m;
+  for (const r of (data as EmpresaDominio[]) ?? []) {
+    m.set(r.dominio, { ...r, n: Number(r.n) });
+  }
+  return m;
+}
+
 /** Correspondentes extraídos do índice (RPC respeita RLS: usuário/admin). */
 export async function getCorrespondentes(): Promise<Correspondente[]> {
   if (!isSupabaseConfigured()) return [];

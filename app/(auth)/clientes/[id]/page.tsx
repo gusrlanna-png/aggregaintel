@@ -36,6 +36,7 @@ import { getVinculoPorCnpj } from "@/lib/supabase/vinculos";
 import { buscarCadastroCnpj } from "@/lib/utils/cnpj";
 import { saveTraco, saveFornecedorMix } from "@/lib/supabase/consumo";
 import { getNFsCliente } from "@/lib/supabase/nf";
+import { getCoordsCadastro, geocodarCadastro } from "@/lib/supabase/mapa";
 import {
   SEGMENTOS,
   precoEfetivoMedioPorTipo,
@@ -96,6 +97,10 @@ export default function ClienteDetailPage() {
     queryKey: ["cliente-socios", id],
     queryFn: () => getSociosCliente(id),
   });
+  const { data: coords } = useQuery({
+    queryKey: ["cliente-coords", id],
+    queryFn: () => getCoordsCadastro(id),
+  });
   // NFs reais do cliente → preço efetivo por produto (referência do planejamento).
   const { data: nfsCliente = [] } = useQuery({
     queryKey: ["cliente-nfs-preco", id],
@@ -140,12 +145,28 @@ export default function ClienteDetailPage() {
         await salvarSociosCliente(id, c.socios);
         nSocios = c.socios.filter((s) => s.nome?.trim()).length;
       }
+      // Geocodifica o endereço → coordenada referencial (não sobrescreve a manual).
+      let geo = false;
+      try {
+        const r = await geocodarCadastro(id, {
+          logradouro: c.logradouro ?? cliente.logradouro,
+          bairro: c.bairro ?? cliente.bairro,
+          municipio: c.municipio ?? cliente.municipio,
+          uf: c.uf ?? cliente.uf,
+          cep: c.cep ?? cliente.cep,
+        });
+        geo = !!r;
+      } catch {
+        /* geocode é complementar — não bloqueia a atualização */
+      }
       await queryClient.invalidateQueries({ queryKey: ["cliente", id] });
       await queryClient.invalidateQueries({ queryKey: ["cliente-socios", id] });
+      await queryClient.invalidateQueries({ queryKey: ["cliente-coords", id] });
+      await queryClient.invalidateQueries({ queryKey: ["mapa-clientes"] });
       toast.success(
         `Dados atualizados via Receita Federal${c.situacao ? ` · ${c.situacao}` : ""}${
           nSocios ? ` · ${nSocios} sócio(s)` : ""
-        }.`
+        }${geo ? " · localização no mapa" : ""}.`
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao atualizar dados.");
@@ -314,8 +335,12 @@ export default function ClienteDetailPage() {
             id={id}
             lat={cliente.lat ?? null}
             lng={cliente.lng ?? null}
+            enderecoLat={coords?.endereco_lat ?? null}
+            enderecoLng={coords?.endereco_lng ?? null}
+            coordManual={coords?.coord_manual ?? false}
             onSaved={() => {
               queryClient.invalidateQueries({ queryKey: ["cliente", id] });
+              queryClient.invalidateQueries({ queryKey: ["cliente-coords", id] });
               queryClient.invalidateQueries({ queryKey: ["mapa-clientes"] });
             }}
           />

@@ -34,6 +34,7 @@ import {
 } from "@/lib/supabase/emissores";
 import { setMonitorarAnm, sincronizarAnm } from "@/lib/supabase/cfem";
 import { getVinculoPorCnpj } from "@/lib/supabase/vinculos";
+import { getCoordsCadastro, geocodarCadastro } from "@/lib/supabase/mapa";
 import {
   getProcessosJuridicos,
   getProcessosAmbientais,
@@ -91,6 +92,18 @@ export default function ConcorrenteDetailPage() {
       toast.success(
         "Atualização em cadeia iniciada em segundo plano (empresa + grupo + sócios). Pode sair da página — acompanhe em 'Tarefas'."
       );
+      // Geocodifica o endereço atual (referencial no mapa) — best-effort.
+      try {
+        await geocodarCadastro(id, {
+          logradouro: data.emissor.logradouro,
+          municipio: data.emissor.municipio,
+          uf: data.emissor.uf,
+          cep: data.emissor.cep,
+        });
+        queryClient.invalidateQueries({ queryKey: ["emissor-coords", id] });
+      } catch {
+        /* geocode é complementar */
+      }
       for (const ms of [10000, 25000, 45000, 70000]) {
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ["emissor", id] });
@@ -144,6 +157,10 @@ export default function ConcorrenteDetailPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["emissor", id],
     queryFn: () => getEmissorComNFs(id),
+  });
+  const { data: coords } = useQuery({
+    queryKey: ["emissor-coords", id],
+    queryFn: () => getCoordsCadastro(id),
   });
   const { data: vinculo } = useQuery({
     queryKey: ["vinculo", data?.emissor.cnpj],
@@ -516,8 +533,12 @@ export default function ConcorrenteDetailPage() {
                 id={emissor.id}
                 lat={emissor.lat ?? null}
                 lng={emissor.lng ?? null}
+                enderecoLat={coords?.endereco_lat ?? null}
+                enderecoLng={coords?.endereco_lng ?? null}
+                coordManual={coords?.coord_manual ?? false}
                 onSaved={() => {
                   queryClient.invalidateQueries({ queryKey: ["emissor", id] });
+                  queryClient.invalidateQueries({ queryKey: ["emissor-coords", id] });
                   queryClient.invalidateQueries({
                     queryKey: ["produtores-mercado"],
                   });

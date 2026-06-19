@@ -49,22 +49,32 @@ export function MapaEditavel({
   id,
   lat,
   lng,
+  enderecoLat = null,
+  enderecoLng = null,
+  coordManual = false,
   onSaved,
 }: {
   tabela: "clientes" | "emissores";
   id: string;
   lat: number | null;
   lng: number | null;
+  enderecoLat?: number | null;
+  enderecoLng?: number | null;
+  coordManual?: boolean;
   onSaved?: (lat: number, lng: number) => void;
 }) {
-  const inicial: [number, number] = [lat ?? -19.92, lng ?? -44.05];
+  const efetivaLat = lat ?? enderecoLat;
+  const efetivaLng = lng ?? enderecoLng;
+  const inicial: [number, number] = [efetivaLat ?? -19.92, efetivaLng ?? -44.05];
   const [pos, setPos] = React.useState<[number, number]>(inicial);
   const [salvando, setSalvando] = React.useState(false);
-  const semCoord = lat == null || lng == null;
+  const semCoord = efetivaLat == null || efetivaLng == null;
+  const temEndereco = enderecoLat != null && enderecoLng != null;
   const mudou =
-    Math.abs(pos[0] - (lat ?? pos[0])) > 1e-6 ||
-    Math.abs(pos[1] - (lng ?? pos[1])) > 1e-6 ||
-    semCoord;
+    efetivaLat == null ||
+    efetivaLng == null ||
+    Math.abs(pos[0] - efetivaLat) > 1e-6 ||
+    Math.abs(pos[1] - efetivaLng) > 1e-6;
 
   async function salvar() {
     setSalvando(true);
@@ -109,11 +119,38 @@ export function MapaEditavel({
           />
         </MapContainer>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {pos[0].toFixed(5)}, {pos[1].toFixed(5)}
-        </span>
+      {/* Duas coordenadas: a do endereço (referencial) e a do mapa (que prevalece). */}
+      <div className="space-y-1 text-xs">
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <MapPin className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Coordenada do mapa{coordManual ? " (salva — prevalece)" : ""}:{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {pos[0].toFixed(5)}, {pos[1].toFixed(5)}
+            </span>
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+          <span>
+            Coordenada do endereço (referencial):{" "}
+            <span className="tabular-nums">
+              {temEndereco
+                ? `${enderecoLat!.toFixed(5)}, ${enderecoLng!.toFixed(5)}`
+                : "— (use “Atualizar dados” para geocodificar)"}
+            </span>
+          </span>
+          {temEndereco && (
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => setPos([enderecoLat!, enderecoLng!])}
+            >
+              usar a do endereço
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex justify-end">
         <Button size="sm" onClick={salvar} disabled={salvando || !mudou}>
           {salvando ? (
             <Loader2 className="h-4 w-4 animate-spin" />

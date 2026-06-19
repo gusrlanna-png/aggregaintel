@@ -6,6 +6,7 @@ import {
   atualizarCadastralEmissor,
 } from "./emissores";
 import { buscarCadastroCnpj, cnpjDigitos, mascararCnpj } from "@/lib/utils/cnpj";
+import { pontuar } from "@/lib/utils/matching";
 
 export interface PessoaLista {
   id: string;
@@ -854,12 +855,22 @@ const foneKey = (v: string) => {
 };
 const STOP = new Set(["de", "da", "do", "dos", "das", "e", "junior", "jr", "neto", "filho"]);
 
+export interface PessoaIndexada {
+  id: string;
+  nome: string;
+  tokens: string[];
+  emails: string[];
+  fones: string[];
+}
+
 export interface IndicePessoas {
   byEmail: Map<string, { id: string; nome: string }>;
   byFone: Map<string, { id: string; nome: string }>;
   byNome: Map<string, { id: string; nome: string }>;
   byExternal: Map<string, { id: string; nome: string }>; // fonte:external_id já vinculado
   todos: { id: string; nome: string; tokens: string[] }[];
+  porId: Map<string, PessoaIndexada>;
+  byToken: Map<string, Set<string>>; // token de nome → ids (índice invertido)
 }
 
 /** Monta um índice das pessoas (e seus e-mails/telefones extras) para matching. */
@@ -870,6 +881,8 @@ export async function getIndicePessoas(): Promise<IndicePessoas> {
     byNome: new Map(),
     byExternal: new Map(),
     todos: [],
+    porId: new Map(),
+    byToken: new Map(),
   };
   if (!isSupabaseConfigured()) return idx;
   const s = createClient();
@@ -887,14 +900,33 @@ export async function getIndicePessoas(): Promise<IndicePessoas> {
     if (p.fone && foneKey(p.fone)) idx.byFone.set(foneKey(p.fone), ref);
     const nn = normNome(p.nome);
     if (nn) idx.byNome.set(nn, ref);
-    idx.todos.push({ id: p.id, nome: p.nome, tokens: nn.split(" ").filter((t) => t.length > 2 && !STOP.has(t)) });
+    const tokens = nn.split(" ").filter((t) => t.length > 2 && !STOP.has(t));
+    idx.todos.push({ id: p.id, nome: p.nome, tokens });
+    idx.porId.set(p.id, {
+      id: p.id,
+      nome: p.nome,
+      tokens,
+      emails: p.email ? [p.email] : [],
+      fones: p.fone ? [p.fone] : [],
+    });
+    for (const t of tokens) {
+      let set = idx.byToken.get(t);
+      if (!set) idx.byToken.set(t, (set = new Set()));
+      set.add(p.id);
+    }
   }
   for (const e of (emails.data as { pessoa_id: string; email: string }[] | null) ?? []) {
-    if (e.email) idx.byEmail.set(e.email.trim().toLowerCase(), { id: e.pessoa_id, nome: nomeDe.get(e.pessoa_id) ?? "" });
+    if (e.email) {
+      idx.byEmail.set(e.email.trim().toLowerCase(), { id: e.pessoa_id, nome: nomeDe.get(e.pessoa_id) ?? "" });
+      idx.porId.get(e.pessoa_id)?.emails.push(e.email);
+    }
   }
   for (const f of (fones.data as { pessoa_id: string; numero: string }[] | null) ?? []) {
     const k = foneKey(f.numero);
-    if (k) idx.byFone.set(k, { id: f.pessoa_id, nome: nomeDe.get(f.pessoa_id) ?? "" });
+    if (k) {
+      idx.byFone.set(k, { id: f.pessoa_id, nome: nomeDe.get(f.pessoa_id) ?? "" });
+      idx.porId.get(f.pessoa_id)?.fones.push(f.numero);
+    }
   }
   for (const it of (idents.data as { pessoa_id: string; fonte: string; external_id: string | null }[] | null) ?? []) {
     if (it.external_id) idx.byExternal.set(`${it.fonte}:${it.external_id}`, { id: it.pessoa_id, nome: nomeDe.get(it.pessoa_id) ?? "" });
@@ -945,6 +977,78 @@ export function casarContato(
     }
   }
   return { tipo: "novo" };
+}
+
+export interface CandidatoMatch {
+  id: string;
+  nome: string;
+  score: number; // 0–100 (índice de confiabilidade)
+  sinais: { tipo: string; label: string }[];
+  tokensComuns: string[];
+  emails: string[];
+  fones: string[];
+  jaVinculado: boolean;
+}
+
+/**
+ * Rankeia os cadastros candidatos a um contato, com índice de confiabilidade
+ * (e-mail, domínio, telefone, nome, empresa). Reutiliza o índice de pessoas.
+ */
+export function rankearCandidatos(
+  contato: { nome: string; emails?: string[]; fones?: string[]; empresa?: string | null; externalId?: string | null; fonte?: string },
+  idx: IndicePessoas,
+  limite = 5
+): CandidatoMatch[] {
+  const ids = new Set<string>();
+  let vincId: string | undefined;
+  if (contato.externalId) {
+    const j = idx.byExternal.get(`${contato.fonte ?? "m365"}:${contato.externalId}`);
+    if (j) { ids.add(j.id); vincId = j.id; }
+  }
+  for (const e of contato.emails ?? []) {
+    const m = idx.byEmail.get((e ?? "").trim().toLowerCase());
+    if (m) ids.add(m.id);
+  }
+  for (const f of contato.fones ?? []) {
+    const k = foneKey(f);
+    if (k) { const m = idx.byFone.get(k); if (m) ids.add(m.id); }
+  }
+  const toks = normNome(contato.nome).split(" ").filter((t) => t.length > 2 && !STOP.has(t));
+  for (const t of toks) {
+    const set = idx.byToken.get(t);
+    if (set) for (const id of set) ids.add(id);
+  }
+
+  const alvo = { nome: contato.nome, emails: contato.emails, fones: contato.fones, empresa: contato.empresa };
+  const out: CandidatoMatch[] = [];
+  for (const id of ids) {
+    const p = idx.porId.get(id);
+    if (!p) continue;
+    const r = pontuar(alvo, { nome: p.nome, emails: p.emails, fones: p.fones });
+    let score = r.score;
+    const sinais: { tipo: string; label: string }[] = r.sinais.map((s) => ({ tipo: s.tipo, label: s.label }));
+    if (id === vincId) { score = 100; sinais.unshift({ tipo: "vinculo", label: "Já vinculado" }); }
+    if (score <= 0 && id !== vincId) continue;
+    out.push({
+      id, nome: p.nome, score, sinais, tokensComuns: r.tokensComuns,
+      emails: p.emails, fones: p.fones, jaVinculado: id === vincId,
+    });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limite);
+}
+
+/** Busca pessoas por nome/e-mail (para vincular a um cadastro não sugerido). */
+export async function buscarPessoas(termo: string, limite = 12): Promise<Pessoa[]> {
+  if (!isSupabaseConfigured() || !termo.trim()) return [];
+  const s = createClient();
+  const t = `%${termo.trim()}%`;
+  const { data, error } = await s
+    .from("pessoas")
+    .select("*")
+    .or(`nome.ilike.${t},email.ilike.${t}`)
+    .limit(limite);
+  if (error) throw error;
+  return (data as Pessoa[]) ?? [];
 }
 
 /**

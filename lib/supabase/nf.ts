@@ -10,6 +10,11 @@ import {
   nowIso,
 } from "@/lib/local/store";
 
+// Colunas leves para LISTAS (sem xml_nf/fonte_raw/dados_adicionais, que são
+// grandes e deixavam a lista pesada). O detalhe (getNFById) carrega tudo.
+const COLS_NF_LISTA =
+  "id, numero_nf, serie, chave_acesso, data_emissao, produto_tipo, produto_desc, quantidade_ton, valor_unitario, valor_total, valor_total_nota, frete_valor, frete_por_conta, peso_bruto, peso_liquido, desconsiderada, revisado, emissor_id, cliente_id, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)";
+
 export interface NFFilters {
   emissor_id?: string;
   produto_tipo?: string;
@@ -77,7 +82,7 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
   let query = supabase
     .from("notas_fiscais")
     .select(
-      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)",
+      COLS_NF_LISTA,
       { count: "exact" }
     )
     .order("data_emissao", { ascending: false })
@@ -95,7 +100,7 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { data: (data ?? []) as NotaFiscal[], count: count ?? 0 };
+  return { data: (data ?? []) as unknown as NotaFiscal[], count: count ?? 0 };
 }
 
 /**
@@ -113,14 +118,12 @@ export async function getNFsCliente(clienteId: string): Promise<NotaFiscal[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("notas_fiscais")
-    .select(
-      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)"
-    )
+    .select(COLS_NF_LISTA)
     .eq("cliente_id", clienteId)
     .not("desconsiderada", "eq", true)
     .order("data_emissao", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as NotaFiscal[];
+  return (data ?? []) as unknown as NotaFiscal[];
 }
 
 export async function getNFById(id: string): Promise<NotaFiscal | null> {

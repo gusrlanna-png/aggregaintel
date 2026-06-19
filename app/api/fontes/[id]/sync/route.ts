@@ -75,6 +75,26 @@ function mapearNF(r: Record<string, unknown>) {
     externo_id: r.ID_NF != null ? String(r.ID_NF) : null,
     xml_nf: xml || null,
     especie_carga: one(xml, "esp"),
+    // Observações/textos da NF (infCpl) — transcritos para dados adicionais.
+    dados_adicionais: one(xml, "infCpl"),
+    tipo_doc_origem: r.TIPO_DOC_ORIG ? String(r.TIPO_DOC_ORIG) : null,
+    // Conhecimento de transporte (CT-e)
+    ct_tipo: r.TIPO_DOC_TRAN ? String(r.TIPO_DOC_TRAN) : null,
+    ct_numero: r.NUMERO_DOC_FRETE_TRAN != null ? String(r.NUMERO_DOC_FRETE_TRAN) : null,
+    ct_data: r.DATA_EMISSAO_DOC_FRETE_TRAN ? String(r.DATA_EMISSAO_DOC_FRETE_TRAN).slice(0, 10) : null,
+    ct_status: r.STATUS_DOC_FRETE_TRAN ? String(r.STATUS_DOC_FRETE_TRAN) : null,
+    // Documento de frete do cliente
+    doc_frete_cli_numero: r.NUMERO_DOC_FRETE_CLI != null ? String(r.NUMERO_DOC_FRETE_CLI) : null,
+    doc_frete_cli_data: r.DATA_EMISSAO_DOC_FRETE_CLI ? String(r.DATA_EMISSAO_DOC_FRETE_CLI).slice(0, 10) : null,
+    doc_frete_cli_status: r.STATUS_DOC_FRETE_CLI ? String(r.STATUS_DOC_FRETE_CLI) : null,
+    // Documento de entrega
+    doc_entrega_numero: r.NUMERO_DOC_ENTR != null ? String(r.NUMERO_DOC_ENTR) : null,
+    doc_entrega_data: r.DATA_EMISSAO_ENTR ? String(r.DATA_EMISSAO_ENTR).slice(0, 10) : null,
+    doc_entrega_ref: r.DATA_REF_ENTR ? String(r.DATA_REF_ENTR).slice(0, 10) : null,
+    doc_entrega_status: r.STATUS_DOC_ENTR ? String(r.STATUS_DOC_ENTR) : null,
+    ciot_erro: r.CIOTERRO ? String(r.CIOTERRO) : null,
+    fonte_criado_em: r.created_at ? String(r.created_at) : null,
+    fonte_raw: r,
   };
 }
 
@@ -130,7 +150,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           const emissor_id = await empresaId(String(r.CNPJ_DOC_ORIG ?? ""), String(r.RAZAO_SOCIAL_DOC_ORIG ?? ""), "eh_produtor");
           const cliente_id = await empresaId(String(r.CNPJ_CPF_CLIENTE_ORIG ?? ""), String(r.RAZAO_SOCIAL_CLIENTE_ORIG ?? ""), "eh_cliente");
           if (!emissor_id) { erros++; continue; }
-          const payload = { ...m, emissor_id, cliente_id, fonte_id: fonte.id };
+          // Vem completa da fonte oficial → já entra como revisada (não "pendente").
+          const payload = { ...m, emissor_id, cliente_id, fonte_id: fonte.id, revisado: true };
 
           // Dedup por chave de acesso.
           let existenteId: string | null = null;

@@ -194,7 +194,7 @@ export default function NFListPage() {
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="sim">Revisadas</SelectItem>
-              <SelectItem value="nao">Pendentes</SelectItem>
+              <SelectItem value="nao">Sem revisão</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -311,8 +311,12 @@ export default function NFListPage() {
                           </Badge>
                         )}
                         {!nf.revisado && (
-                          <Badge variant="warning" className="ml-2 text-[10px]">
-                            pendente
+                          <Badge
+                            variant="warning"
+                            className="ml-2 text-[10px]"
+                            title="Importada por OCR/manual e ainda não conferida por uma pessoa"
+                          >
+                            sem revisão
                           </Badge>
                         )}
                       </TableCell>

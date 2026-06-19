@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, TrendingUp } from "lucide-react";
+import { ArrowLeft, Factory, Loader2, TrendingUp } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -116,16 +116,24 @@ export default function ProjecaoPage() {
           <ArrowLeft className="h-4 w-4" /> Planejamento
         </Link>
       </Button>
-      <div className="flex items-center gap-2">
-        <TrendingUp className="h-5 w-5 text-muted-foreground" />
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">
-            Projeção de vendas
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Realizado (jan–jun) + projetado (jul–dez) por cliente · base do BI
-          </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">
+              Projeção de vendas
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Realizado (jan–jun) + projetado (jul–dez) por cliente · base do BI
+            </p>
+          </div>
         </div>
+        <Link
+          href="/projecao/produtor"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <Factory className="h-4 w-4" /> Por produtor
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">

@@ -232,9 +232,17 @@ export default function ContatosM365Page() {
       <Button asChild variant="ghost" size="sm">
         <Link href="/configuracoes"><ArrowLeft className="h-4 w-4" /> Configurações</Link>
       </Button>
-      <div className="flex items-center gap-2">
-        <Users className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-xl font-bold tracking-tight">Contatos Microsoft 365</h1>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-muted-foreground" />
+          <h1 className="text-xl font-bold tracking-tight">Contatos Microsoft 365</h1>
+        </div>
+        <Link
+          href="/configuracoes/historico-contatos-m365"
+          className="shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+        >
+          Histórico por usuário
+        </Link>
       </div>
 
       {conectado === false && (

@@ -690,6 +690,111 @@ export async function deletePessoaIdentidade(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ── Histórico de contatos M365 (por usuário que vinculou) ─────────────────────
+
+export interface HistoricoContatoM365 {
+  id: string;
+  pessoa_id: string;
+  pessoa_nome: string | null;
+  fonte: string;
+  external_id: string | null;
+  conta_origem: string | null;
+  criado_por: string | null;
+  criado_por_nome: string | null;
+  criado_em: string;
+  raw: Record<string, unknown> | null;
+}
+
+/**
+ * Histórico de contatos importados/vinculados do Microsoft 365, com quem
+ * vinculou (criado_por) e a conta de origem. Admin vê todos; demais perfis
+ * veem o que a RLS de pessoa_identidades permite. Filtra por usuário opcional.
+ */
+export async function getHistoricoContatosM365(
+  usuarioId?: string
+): Promise<HistoricoContatoM365[]> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  let q = s
+    .from("pessoa_identidades")
+    .select(
+      "id, pessoa_id, fonte, external_id, conta_origem, criado_por, criado_em, raw, pessoa:pessoas(nome)"
+    )
+    .in("fonte", ["m365", "365"])
+    .order("criado_em", { ascending: false })
+    .limit(2000);
+  if (usuarioId) q = q.eq("criado_por", usuarioId);
+  const { data, error } = await q;
+  if (error) {
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+  type Row = Omit<HistoricoContatoM365, "pessoa_nome" | "criado_por_nome"> & {
+    pessoa: { nome: string | null } | { nome: string | null }[] | null;
+  };
+  const lista = ((data as unknown as Row[]) ?? []).map((r) => {
+    const p = Array.isArray(r.pessoa) ? r.pessoa[0] : r.pessoa;
+    return {
+      id: r.id,
+      pessoa_id: r.pessoa_id,
+      pessoa_nome: p?.nome ?? null,
+      fonte: r.fonte,
+      external_id: r.external_id,
+      conta_origem: r.conta_origem,
+      criado_por: r.criado_por,
+      criado_por_nome: null as string | null,
+      criado_em: r.criado_em,
+      raw: r.raw,
+    };
+  });
+  // Resolve nome de quem vinculou.
+  const ids = [...new Set(lista.map((i) => i.criado_por).filter(Boolean))] as string[];
+  if (ids.length) {
+    const { data: us } = await s
+      .from("app_usuarios")
+      .select("id, nome, email")
+      .in("id", ids);
+    const mapa = new Map(
+      (us ?? []).map((u: { id: string; nome: string | null; email: string | null }) => [
+        u.id,
+        u.nome || u.email,
+      ])
+    );
+    for (const i of lista)
+      i.criado_por_nome = i.criado_por ? mapa.get(i.criado_por) ?? null : null;
+  }
+  return lista;
+}
+
+/** Lista de usuários distintos que vincularam contatos M365 (para filtro). */
+export async function getUsuariosComContatosM365(): Promise<
+  { id: string; nome: string }[]
+> {
+  if (!isSupabaseConfigured()) return [];
+  const s = createClient();
+  const { data, error } = await s
+    .from("pessoa_identidades")
+    .select("criado_por")
+    .in("fonte", ["m365", "365"])
+    .not("criado_por", "is", null)
+    .limit(5000);
+  if (error) return [];
+  const ids = [
+    ...new Set((data ?? []).map((r: { criado_por: string }) => r.criado_por)),
+  ];
+  if (!ids.length) return [];
+  const { data: us } = await s
+    .from("app_usuarios")
+    .select("id, nome, email")
+    .in("id", ids);
+  return (us ?? [])
+    .map((u: { id: string; nome: string | null; email: string | null }) => ({
+      id: u.id,
+      nome: u.nome || u.email || u.id,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
 // ── Pessoas duplicadas + mesclagem ────────────────────────────────────────────
 
 export interface PessoaDup {

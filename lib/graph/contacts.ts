@@ -4,6 +4,8 @@ export interface GraphContact {
   emailAddresses: { address: string; name?: string }[];
   mobilePhone: string | null;
   businessPhones: string[];
+  companyName?: string | null;
+  jobTitle?: string | null;
   homeAddress: {
     city?: string;
     state?: string;
@@ -31,7 +33,7 @@ export async function fetchOutlookContacts(
   let url: string | undefined =
     "https://graph.microsoft.com/v1.0/me/contacts" +
     "?$top=999" +
-    "&$select=id,displayName,emailAddresses,mobilePhone,businessPhones,homeAddress,businessAddress" +
+    "&$select=id,displayName,emailAddresses,mobilePhone,businessPhones,companyName,jobTitle,homeAddress,businessAddress" +
     "&$orderby=displayName";
 
   while (url) {

@@ -33,30 +33,57 @@ import {
 import {
   addPessoaIdentidade,
   adicionarDadosContato,
-  casarContato,
+  buscarPessoas,
   criarPessoa,
   getIndicePessoas,
-  getPessoaById,
+  rankearCandidatos,
+  type CandidatoMatch,
   type IndicePessoas,
-  type MatchPessoa,
   type Pessoa,
 } from "@/lib/supabase/pessoas";
+import { classeMatch } from "@/lib/utils/matching";
 
 type Aba = "novos" | "sistema" | "duplicatas";
 
 const emailsDe = (c: GraphContact) => (c.emailAddresses ?? []).map((e) => e.address).filter(Boolean);
 const fonesDe = (c: GraphContact) =>
   [c.mobilePhone, ...(c.businessPhones ?? [])].filter(Boolean) as string[];
-/** Snapshot dos dados do contato como vieram da origem (preserva p/ sync futuro). */
 const rawDe = (c: GraphContact): Record<string, unknown> => ({
   nome: c.displayName,
   emails: emailsDe(c),
   telefones: fonesDe(c),
+  empresa: c.companyName ?? null,
+  cargo: c.jobTitle ?? null,
   endereco: enderecoDoContato(c),
   capturado_em: new Date().toISOString(),
 });
 const norm = (s: string) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+const CLASSE_BADGE: Record<string, string> = {
+  alto: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  medio: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  baixo: "bg-muted text-muted-foreground",
+  nenhum: "bg-muted text-muted-foreground",
+};
+
+/** Destaca, em negrito, os termos do nome que coincidem com o cadastro. */
+function NomeDestacado({ nome, comuns }: { nome: string; comuns: string[] }) {
+  if (!comuns.length) return <>{nome}</>;
+  const set = new Set(comuns);
+  return (
+    <>
+      {nome.split(/(\s+)/).map((parte, i) => {
+        const t = norm(parte.replace(/[.,/-]/g, ""));
+        return set.has(t) ? (
+          <strong key={i} className="text-foreground">{parte}</strong>
+        ) : (
+          <span key={i}>{parte}</span>
+        );
+      })}
+    </>
+  );
+}
 
 export default function ContatosM365Page() {
   const qc = useQueryClient();
@@ -68,8 +95,8 @@ export default function ContatosM365Page() {
   const [contaOrigem, setContaOrigem] = React.useState<string | null>(null);
   const [aba, setAba] = React.useState<Aba>("duplicatas");
   const [busca, setBusca] = React.useState("");
+  const [ordenarScore, setOrdenarScore] = React.useState(true);
   const [expandido, setExpandido] = React.useState<string | null>(null);
-  const [detalhe, setDetalhe] = React.useState<Record<string, Pessoa | null>>({});
 
   React.useEffect(() => {
     createClient()
@@ -102,34 +129,64 @@ export default function ContatosM365Page() {
     }
   }
 
-  const matchDe = React.useMemo(() => {
-    const m = new Map<string, MatchPessoa>();
+  // Candidatos rankeados (índice de confiabilidade) por contato.
+  const rankDe = React.useMemo(() => {
+    const m = new Map<string, CandidatoMatch[]>();
     if (contatos && indice) {
-      for (const c of contatos)
-        m.set(c.id, casarContato({ nome: c.displayName, emails: emailsDe(c), fones: fonesDe(c), externalId: c.id, fonte: "m365" }, indice));
+      for (const c of contatos) {
+        m.set(
+          c.id,
+          rankearCandidatos(
+            {
+              nome: c.displayName,
+              emails: emailsDe(c),
+              fones: fonesDe(c),
+              empresa: c.companyName ?? null,
+              externalId: c.id,
+              fonte: "m365",
+            },
+            indice,
+            5
+          )
+        );
+      }
     }
     return m;
   }, [contatos, indice]);
 
+  const topDe = React.useCallback(
+    (id: string) => rankDe.get(id)?.[0] ?? null,
+    [rankDe]
+  );
+
   const buckets = React.useMemo(() => {
     const b = { novos: [] as GraphContact[], sistema: [] as GraphContact[], duplicatas: [] as GraphContact[] };
     for (const c of contatos ?? []) {
-      const t = matchDe.get(c.id)?.tipo ?? "novo";
-      if (feitos[c.id]) b.sistema.push(c);
-      else if (t === "existe") b.sistema.push(c);
-      else if (t === "duplicata") b.duplicatas.push(c);
+      if (feitos[c.id]) { b.sistema.push(c); continue; }
+      const top = topDe(c.id);
+      const score = top?.score ?? 0;
+      if (top?.jaVinculado || score >= 80) b.sistema.push(c);
+      else if (score >= 45) b.duplicatas.push(c);
       else b.novos.push(c);
     }
     return b;
-  }, [contatos, matchDe, feitos]);
+  }, [contatos, topDe, feitos]);
 
   const filtrar = (lista: GraphContact[]) => {
     const toks = norm(busca).split(/\s+/).filter(Boolean);
-    if (!toks.length) return lista;
-    return lista.filter((c) => {
-      const hay = norm([c.displayName, ...emailsDe(c), ...fonesDe(c)].join(" "));
-      return toks.every((t) => hay.includes(t));
-    });
+    let arr = lista;
+    if (toks.length) {
+      arr = lista.filter((c) => {
+        const hay = norm(
+          [c.displayName, c.companyName, ...emailsDe(c), ...fonesDe(c)].filter(Boolean).join(" ")
+        );
+        return toks.every((t) => hay.includes(t));
+      });
+    }
+    if (ordenarScore) {
+      arr = [...arr].sort((a, b) => (topDe(b.id)?.score ?? 0) - (topDe(a.id)?.score ?? 0));
+    }
+    return arr;
   };
 
   function invalidar() {
@@ -137,7 +194,7 @@ export default function ContatosM365Page() {
     qc.invalidateQueries({ queryKey: ["pessoa-identidades"] });
   }
 
-  async function vincular(c: GraphContact, pessoaId: string) {
+  async function vincular(c: GraphContact, pessoaId: string, nome?: string) {
     try {
       const email = emailsDe(c)[0] ?? null;
       await addPessoaIdentidade(pessoaId, {
@@ -148,12 +205,11 @@ export default function ContatosM365Page() {
         conta_origem: contaOrigem,
         raw: rawDe(c),
       });
-      // Traz os dados do contato (e-mails/telefones) para o cadastro existente.
       const r = await adicionarDadosContato(pessoaId, { emails: emailsDe(c), fones: fonesDe(c) });
       setFeitos((p) => ({ ...p, [c.id]: "vinculado" }));
       invalidar();
       const add = r.emails + r.fones;
-      toast.success(`Vinculado a ${c.displayName}${add ? ` · ${add} dado(s) adicionado(s)` : ""}.`);
+      toast.success(`Vinculado a ${nome ?? c.displayName}${add ? ` · ${add} dado(s) adicionado(s)` : ""}.`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (/duplicate|unique/i.test(msg)) {
@@ -172,7 +228,7 @@ export default function ContatosM365Page() {
         email,
         fone: foneDoContato(c),
         ...enderecoDoContato(c),
-        notas: "Importado do Microsoft 365",
+        notas: c.companyName ? `Microsoft 365 · ${c.companyName}` : "Importado do Microsoft 365",
       });
       try {
         await addPessoaIdentidade(id, {
@@ -184,7 +240,6 @@ export default function ContatosM365Page() {
           raw: rawDe(c),
         });
       } catch {/* identidade já existe */}
-      // Adiciona TODOS os e-mails/telefones do contato (não só o principal).
       try { await adicionarDadosContato(id, { emails: emailsDe(c), fones: fonesDe(c) }); } catch {}
       setFeitos((p) => ({ ...p, [c.id]: "criado" }));
       invalidar();
@@ -194,29 +249,20 @@ export default function ContatosM365Page() {
     }
   }
 
-  /** Importa/vincula em massa SÓ a aba atual (não força as outras). */
   async function aplicarAba() {
     const lista = filtrar(buckets[aba]);
     setLoading(true);
     let n = 0;
     for (const c of lista) {
       if (feitos[c.id]) continue;
-      const m = matchDe.get(c.id);
       if (aba === "novos") { await criar(c); n++; }
-      else if (aba === "sistema" && m?.pessoaId) { await vincular(c, m.pessoaId); n++; }
-      // duplicatas: nunca em massa — exige decisão individual
+      else if (aba === "sistema") {
+        const top = topDe(c.id);
+        if (top?.id) { await vincular(c, top.id, top.nome); n++; }
+      }
     }
     setLoading(false);
     if (aba !== "duplicatas") toast.success(`${n} contato(s) processado(s).`);
-  }
-
-  async function expandir(c: GraphContact, pessoaId?: string) {
-    const novo = expandido === c.id ? null : c.id;
-    setExpandido(novo);
-    if (novo && pessoaId && detalhe[pessoaId] === undefined) {
-      const p = await getPessoaById(pessoaId);
-      setDetalhe((d) => ({ ...d, [pessoaId]: p }));
-    }
   }
 
   const ABAS: { k: Aba; label: string; cls: string }[] = [
@@ -269,7 +315,6 @@ export default function ContatosM365Page() {
             </p>
           ) : (
             <>
-              {/* Abas */}
               <div className="flex flex-wrap gap-1 rounded-md border p-1">
                 {ABAS.map((a) => (
                   <button
@@ -285,17 +330,25 @@ export default function ContatosM365Page() {
                 ))}
               </div>
 
-              {/* Busca multi-texto */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[180px] flex-1">
                   <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
-                    placeholder="Buscar por nome, e-mail ou telefone…"
+                    placeholder="Buscar por nome, empresa, e-mail ou telefone…"
                     className="pl-8"
                   />
                 </div>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={ordenarScore}
+                    onChange={(e) => setOrdenarScore(e.target.checked)}
+                  />
+                  Ordenar por % de coincidência
+                </label>
                 {aba !== "duplicatas" && lista.length > 0 && (
                   <Button size="sm" variant="outline" onClick={aplicarAba} disabled={loading}>
                     {aba === "novos" ? <Download className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
@@ -304,102 +357,23 @@ export default function ContatosM365Page() {
                 )}
               </div>
 
-              {/* Lista da aba */}
               <div className="divide-y rounded-md border">
                 {lista.length === 0 ? (
                   <p className="p-4 text-center text-xs text-muted-foreground">Nenhum contato nesta aba/busca.</p>
                 ) : (
-                  lista.slice(0, 300).map((c) => {
-                    const feito = feitos[c.id];
-                    const m = matchDe.get(c.id);
-                    const email = emailsDe(c)[0];
-                    const fone = foneDoContato(c);
-                    const aberto = expandido === c.id;
-                    const pdet = m?.pessoaId ? detalhe[m.pessoaId] : undefined;
-                    return (
-                      <div key={c.id} className="text-sm">
-                        <div className="flex items-center gap-2 px-3 py-2.5">
-                          {aba === "duplicatas" && (
-                            <button onClick={() => expandir(c, m?.pessoaId)} className="shrink-0 text-muted-foreground">
-                              {aberto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                            </button>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{c.displayName}</p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {[email, fone].filter(Boolean).join("  ·  ") || "—"}
-                            </p>
-                            {!feito && m && m.tipo !== "novo" && (
-                              <p className={cn("truncate text-xs", m.tipo === "existe" ? "text-emerald-600" : "text-amber-600")}>
-                                {m.tipo === "existe" ? "Já cadastrado" : "Possível duplicata"}: {m.pessoaNome} ({m.motivo})
-                              </p>
-                            )}
-                          </div>
-                          {feito ? (
-                            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-emerald-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> {feito === "vinculado" ? "Vinculado" : "Importado"}
-                            </span>
-                          ) : aba === "sistema" && m?.pessoaId ? (
-                            <div className="flex shrink-0 gap-1">
-                              <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                <Link href={`/pessoas/${m.pessoaId}`} target="_blank"><ExternalLink className="h-3.5 w-3.5" /></Link>
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => vincular(c, m.pessoaId!)}>
-                                <Link2 className="h-3.5 w-3.5" /> Vincular
-                              </Button>
-                            </div>
-                          ) : aba === "novos" ? (
-                            <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => criar(c)}>
-                              <UserPlus className="h-3.5 w-3.5" /> Migrar
-                            </Button>
-                          ) : null}
-                        </div>
-
-                        {/* Painel de duplicata lado a lado */}
-                        {aba === "duplicatas" && aberto && (
-                          <div className="space-y-2 border-t bg-muted/30 p-3">
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="rounded-md border bg-background p-2">
-                                <p className="mb-1 font-semibold text-muted-foreground">Contato do Outlook (365)</p>
-                                <p><strong>{c.displayName}</strong></p>
-                                <p>{emailsDe(c).join(", ") || "—"}</p>
-                                <p>{fonesDe(c).join(", ") || "—"}</p>
-                              </div>
-                              <div className="rounded-md border bg-background p-2">
-                                <p className="mb-1 font-semibold text-muted-foreground">Cadastro existente</p>
-                                {pdet === undefined ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : pdet === null ? (
-                                  <p>{m?.pessoaNome}</p>
-                                ) : (
-                                  <>
-                                    <p><strong>{pdet.nome}</strong></p>
-                                    <p>{pdet.email || "—"}</p>
-                                    <p>{pdet.fone || "—"}</p>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => m?.pessoaId && vincular(c, m.pessoaId)}>
-                                <Link2 className="h-3.5 w-3.5" /> É a mesma pessoa (vincular)
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => criar(c)}>
-                                <UserPlus className="h-3.5 w-3.5" /> São diferentes (criar novo)
-                              </Button>
-                              {m?.pessoaId && (
-                                <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                  <Link href={`/pessoas/${m.pessoaId}`} target="_blank">
-                                    <ExternalLink className="h-3.5 w-3.5" /> Abrir/editar cadastro
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
+                  lista.slice(0, 300).map((c) => (
+                    <LinhaContato
+                      key={c.id}
+                      c={c}
+                      aba={aba}
+                      candidatos={rankDe.get(c.id) ?? []}
+                      feito={feitos[c.id]}
+                      aberto={expandido === c.id}
+                      onToggle={() => setExpandido(expandido === c.id ? null : c.id)}
+                      onVincular={vincular}
+                      onCriar={criar}
+                    />
+                  ))
                 )}
               </div>
               {lista.length > 300 && (
@@ -411,6 +385,189 @@ export default function ContatosM365Page() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PorcentBadge({ score }: { score: number }) {
+  if (score <= 0) return null;
+  return (
+    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums", CLASSE_BADGE[classeMatch(score)])}>
+      {score}%
+    </span>
+  );
+}
+
+function LinhaContato({
+  c, aba, candidatos, feito, aberto, onToggle, onVincular, onCriar,
+}: {
+  c: GraphContact;
+  aba: Aba;
+  candidatos: CandidatoMatch[];
+  feito?: "vinculado" | "criado";
+  aberto: boolean;
+  onToggle: () => void;
+  onVincular: (c: GraphContact, pessoaId: string, nome?: string) => void;
+  onCriar: (c: GraphContact) => void;
+}) {
+  const top = candidatos[0];
+  const email = (c.emailAddresses ?? [])[0]?.address;
+  const fone = foneDoContato(c);
+
+  return (
+    <div className="text-sm">
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button onClick={onToggle} className="shrink-0 text-muted-foreground">
+          {aberto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 truncate font-medium">
+            <span className="truncate">
+              <NomeDestacado nome={c.displayName} comuns={top?.tokensComuns ?? []} />
+            </span>
+            {top && <PorcentBadge score={top.score} />}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {[c.companyName, email, fone].filter(Boolean).join("  ·  ") || "—"}
+          </p>
+          {top && !feito && (
+            <p className="truncate text-xs text-muted-foreground">
+              {top.jaVinculado ? "Já vinculado a " : "Mais provável: "}
+              <span className="font-medium">{top.nome}</span>
+              {top.sinais.length > 0 && ` · ${top.sinais.map((s) => s.label).join(", ")}`}
+            </p>
+          )}
+        </div>
+        {feito ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-emerald-600">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {feito === "vinculado" ? "Vinculado" : "Importado"}
+          </span>
+        ) : aba === "novos" ? (
+          <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => onCriar(c)}>
+            <UserPlus className="h-3.5 w-3.5" /> Migrar
+          </Button>
+        ) : top?.id ? (
+          <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => onVincular(c, top.id, top.nome)}>
+            <Link2 className="h-3.5 w-3.5" /> Vincular
+          </Button>
+        ) : null}
+      </div>
+
+      {aberto && (
+        <PainelConciliacao
+          c={c}
+          candidatos={candidatos}
+          onVincular={onVincular}
+          onCriar={onCriar}
+        />
+      )}
+    </div>
+  );
+}
+
+function PainelConciliacao({
+  c, candidatos, onVincular, onCriar,
+}: {
+  c: GraphContact;
+  candidatos: CandidatoMatch[];
+  onVincular: (c: GraphContact, pessoaId: string, nome?: string) => void;
+  onCriar: (c: GraphContact) => void;
+}) {
+  const [buscaOutro, setBuscaOutro] = React.useState("");
+  const [resultados, setResultados] = React.useState<Pessoa[]>([]);
+  const [buscando, setBuscando] = React.useState(false);
+
+  async function procurar(termo: string) {
+    setBuscaOutro(termo);
+    if (termo.trim().length < 2) { setResultados([]); return; }
+    setBuscando(true);
+    try {
+      setResultados(await buscarPessoas(termo, 8));
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  const emails = (c.emailAddresses ?? []).map((e) => e.address).filter(Boolean);
+  const fones = [c.mobilePhone, ...(c.businessPhones ?? [])].filter(Boolean) as string[];
+
+  return (
+    <div className="space-y-3 border-t bg-muted/30 p-3 text-xs">
+      {/* Contato do Outlook */}
+      <div className="rounded-md border bg-background p-2">
+        <p className="mb-1 font-semibold text-muted-foreground">Contato do Outlook (365)</p>
+        <p><strong>{c.displayName}</strong>{c.companyName ? ` · ${c.companyName}` : ""}</p>
+        <p>{emails.join(", ") || "—"}</p>
+        <p>{fones.join(", ") || "—"}</p>
+      </div>
+
+      {/* Candidatos rankeados */}
+      <div>
+        <p className="mb-1 font-semibold text-muted-foreground">
+          Cadastros parecidos {candidatos.length ? `(${candidatos.length})` : ""}
+        </p>
+        {candidatos.length === 0 ? (
+          <p className="text-muted-foreground">Nenhum candidato automático. Use a busca abaixo para vincular a um cadastro existente.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {candidatos.map((cand) => (
+              <div key={cand.id} className="flex items-center gap-2 rounded-md border bg-background p-2">
+                <PorcentBadge score={cand.score} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{cand.nome}</p>
+                  <p className="truncate text-muted-foreground">
+                    {cand.sinais.map((s) => s.label).join(" · ") || "—"}
+                  </p>
+                </div>
+                <Link href={`/pessoas/${cand.id}`} target="_blank" className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+                <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => onVincular(c, cand.id, cand.nome)}>
+                  <Link2 className="h-3.5 w-3.5" /> Vincular
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Vincular a OUTRO cadastro (não sugerido) */}
+      <div>
+        <p className="mb-1 font-semibold text-muted-foreground">Vincular a outro cadastro</p>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={buscaOutro}
+            onChange={(e) => procurar(e.target.value)}
+            placeholder="Buscar pessoa por nome ou e-mail…"
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+        {buscando ? (
+          <div className="py-2 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" /></div>
+        ) : resultados.length > 0 ? (
+          <div className="mt-1 divide-y rounded-md border bg-background">
+            {resultados.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 p-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{p.nome}</p>
+                  <p className="truncate text-muted-foreground">{[p.email, p.fone].filter(Boolean).join(" · ") || "—"}</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => onVincular(c, p.id, p.nome)}>
+                  <Link2 className="h-3.5 w-3.5" /> Vincular
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Criar novo */}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onCriar(c)}>
+          <UserPlus className="h-3.5 w-3.5" /> São diferentes (criar novo)
+        </Button>
+      </div>
     </div>
   );
 }

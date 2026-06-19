@@ -380,8 +380,14 @@ export default function ClienteDetailPage() {
       {cliente.grupo_economico && (
         <Card>
           <CardContent className="p-4">
-            <p className="mb-2 text-sm font-medium">
-              Grupo {cliente.grupo_economico}
+            <p className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
+              <span>Grupo {cliente.grupo_economico}</span>
+              <Link
+                href={`/grupos/${encodeURIComponent(cliente.grupo_economico)}`}
+                className="text-xs font-normal text-primary hover:underline"
+              >
+                Ver grupo consolidado →
+              </Link>
             </p>
             {grupoMembros.length === 0 ? (
               <p className="text-sm text-muted-foreground">

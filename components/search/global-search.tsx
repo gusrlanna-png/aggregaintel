@@ -46,6 +46,7 @@ const PAGINAS: { href: string; titulo: string; termos: string }[] = [
   { href: "/concorrentes", titulo: "Mercado · Produtores", termos: "mercado produtores concorrentes" },
   { href: "/clientes", titulo: "Clientes", termos: "clientes" },
   { href: "/pessoas", titulo: "Pessoas (sócios)", termos: "pessoas socios" },
+  { href: "/grupos", titulo: "Grupos econômicos", termos: "grupos economico holding" },
   { href: "/vendas", titulo: "Planejamento de vendas", termos: "vendas planejamento metas" },
   { href: "/mercados", titulo: "Mercados", termos: "mercados regioes" },
   { href: "/mapa", titulo: "Mapa de decisão", termos: "mapa decisao raio" },
@@ -189,22 +190,18 @@ export function GlobalSearch({
       .join(" · "),
   }));
 
-  // Grupos econômicos (derivados de clientes + produtores) → abre um membro.
+  // Grupos econômicos (derivados de clientes + produtores) → página do grupo.
   const grupoRes: Resultado[] = temBusca
     ? (() => {
         const m = new Map<string, Resultado>();
-        for (const c of clientes) {
-          if (c.grupo_economico && matchBusca(termo, c.grupo_economico)) {
-            const k = normTxt(c.grupo_economico);
-            if (!m.has(k)) m.set(k, { href: `/clientes/${c.id}`, titulo: c.grupo_economico, detalhe: "Grupo econômico" });
+        const add = (g: string | null | undefined) => {
+          if (g && matchBusca(termo, g)) {
+            const k = normTxt(g);
+            if (!m.has(k)) m.set(k, { href: `/grupos/${encodeURIComponent(g)}`, titulo: g, detalhe: "Grupo econômico" });
           }
-        }
-        for (const p of produtores) {
-          if (p.grupo_economico && matchBusca(termo, p.grupo_economico)) {
-            const k = normTxt(p.grupo_economico);
-            if (!m.has(k)) m.set(k, { href: `/concorrentes/${p.id}`, titulo: p.grupo_economico, detalhe: "Grupo econômico" });
-          }
-        }
+        };
+        for (const c of clientes) add(c.grupo_economico);
+        for (const p of produtores) add(p.grupo_economico);
         return [...m.values()].slice(0, 6);
       })()
     : [];

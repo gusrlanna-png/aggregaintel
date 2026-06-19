@@ -438,7 +438,7 @@ export default function PessoaDetailPage() {
         <Card>
           <CardContent className="p-4">
             <p className="mb-3 text-sm font-medium">E-mails (Microsoft 365)</p>
-            <EmailsContato email={pessoa.email} />
+            <EmailsContato email={pessoa.email} pessoaId={id} />
           </CardContent>
         </Card>
       )}

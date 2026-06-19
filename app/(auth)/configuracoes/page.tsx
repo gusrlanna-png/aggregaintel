@@ -98,6 +98,13 @@ const ITENS: ConfigItem[] = [
       "Sincronize seus contatos do Outlook para o sistema. Requer login com conta Microsoft corporativa.",
   },
   {
+    href: "/configuracoes/emails",
+    icon: Users,
+    titulo: "E-mails indexados (M365)",
+    descricao:
+      "Busca em assunto, trecho e remetente dos e-mails abertos no sistema. Cada um vê os seus; admin tem a visão consolidada. Só metadados (LGPD).",
+  },
+  {
     href: "/configuracoes/historico-contatos-m365",
     icon: Users,
     titulo: "Histórico de contatos M365",

@@ -15,12 +15,14 @@ import {
   type GraphMessage,
   type GraphMessageBody,
 } from "@/lib/graph/mail";
+import { indexarEmailsContato } from "@/lib/supabase/email-indice";
 
 interface Props {
   email: string;
+  pessoaId?: string;
 }
 
-export function EmailsContato({ email }: Props) {
+export function EmailsContato({ email, pessoaId }: Props) {
   const ms365 = useMs365();
   const [mensagens, setMensagens] = React.useState<GraphMessage[] | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -38,13 +40,15 @@ export function EmailsContato({ email }: Props) {
       try {
         const msgs = await fetchEmailsByContact(ms365.providerToken, email, 25, busca);
         setMensagens(msgs);
+        // Indexa metadados+trecho (privado do usuário; RLS). Não bloqueia a UI.
+        indexarEmailsContato(msgs, email, pessoaId).catch(() => {});
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao carregar e-mails.");
       } finally {
         setLoading(false);
       }
     },
-    [ms365.providerToken, email]
+    [ms365.providerToken, email, pessoaId]
   );
 
   async function abrir(m: GraphMessage) {

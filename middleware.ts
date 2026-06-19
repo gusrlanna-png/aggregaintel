@@ -6,7 +6,6 @@ import {
   SUPABASE_URL,
   isSupabaseConfigured,
 } from "@/lib/supabase/config";
-import { podeAcessar, type Perfil } from "@/lib/auth/rotas";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -62,11 +61,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", base));
   }
 
-  // Controle de acesso por perfil (RBAC) — não bloqueia rotas de API.
+  // Controle de acesso por perfil (RBAC configurável no banco) — não bloqueia /api.
   if (user && !isPublic && !pathname.startsWith("/api")) {
-    const { data: perfil } = await supabase.rpc("meu_perfil");
-    if (!podeAcessar((perfil as Perfil | null) ?? null, pathname)) {
-      return NextResponse.redirect(new URL("/dashboard", base));
+    try {
+      const { data: pode, error } = await supabase.rpc("pode_ver_rota", {
+        p_rota: pathname,
+      });
+      // Fail-open: só redireciona quando a checagem retornou explicitamente false.
+      if (!error && pode === false) {
+        return NextResponse.redirect(new URL("/dashboard", base));
+      }
+    } catch {
+      /* erro transitório não derruba o usuário (dados seguem protegidos por RLS) */
     }
   }
 

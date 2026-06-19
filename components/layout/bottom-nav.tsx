@@ -15,8 +15,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { getMeuPerfil } from "@/lib/supabase/perfil";
-import { podeAcessar } from "@/lib/auth/rotas";
+import { getMinhasRotas, rotaLiberada } from "@/lib/supabase/perfil";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Início" },
@@ -31,16 +30,16 @@ const NAV_ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { data: perfil } = useQuery({
-    queryKey: ["meu-perfil"],
-    queryFn: getMeuPerfil,
+  const { data: rotas } = useQuery({
+    queryKey: ["minhas-rotas"],
+    queryFn: getMinhasRotas,
   });
 
-  // Enquanto carrega (undefined) mostra tudo; depois filtra pela alçada.
+  // Enquanto carrega (undefined) mostra tudo; depois filtra pela alçada (config no banco).
   const itens =
-    perfil === undefined
+    rotas === undefined
       ? NAV_ITEMS
-      : NAV_ITEMS.filter((i) => podeAcessar(perfil, i.href));
+      : NAV_ITEMS.filter((i) => rotaLiberada(rotas, i.href));
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-safe">

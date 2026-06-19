@@ -119,6 +119,13 @@ const ITENS: ConfigItem[] = [
       "Importa contatos de Google Contacts / celular (CSV) como pessoas, com telefones e e-mails. Ignora quem já existe (De→Para por nome).",
   },
   {
+    href: "/configuracoes/permissoes",
+    icon: ShieldCheck,
+    titulo: "Permissões por perfil",
+    descricao:
+      "Define quais seções cada perfil acessa (menu + bloqueio de páginas). admin/gestor têm acesso total. Apenas administradores.",
+  },
+  {
     href: "/configuracoes/auditoria",
     icon: ShieldCheck,
     titulo: "Auditoria e acessos",

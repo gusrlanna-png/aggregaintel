@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Tags } from "lucide-react";
+import { ArrowUpRight, Loader2, Tags } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,14 @@ import {
  * habilita (ou remove) os recursos correspondentes e faz a empresa aparecer
  * na lista do papel (ex.: marcar Cliente num produtor o inclui no planejamento).
  */
-export function PapeisEmpresa({ empresaId }: { empresaId: string }) {
+export function PapeisEmpresa({
+  empresaId,
+  contexto,
+}: {
+  empresaId: string;
+  /** Página atual, para não oferecer link para a própria visão. */
+  contexto?: "cliente" | "produtor";
+}) {
   const qc = useQueryClient();
   const { data: papeis } = useQuery({
     queryKey: ["empresa-papeis", empresaId],
@@ -72,6 +80,29 @@ export function PapeisEmpresa({ empresaId }: { empresaId: string }) {
             </label>
           ))}
         </div>
+
+        {/* Atalhos para a visão de cada papel ativo (mesmo cadastro/id). */}
+        {(() => {
+          const links: { href: string; label: string }[] = [];
+          if (papeis?.eh_produtor && contexto !== "produtor")
+            links.push({ href: `/concorrentes/${empresaId}`, label: "Abrir visão de Produtor (CFEM, produção)" });
+          if (papeis?.eh_cliente && contexto !== "cliente")
+            links.push({ href: `/clientes/${empresaId}`, label: "Abrir visão de Cliente (planejamento, vendas)" });
+          if (links.length === 0) return null;
+          return (
+            <div className="flex flex-col gap-1.5">
+              {links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <ArrowUpRight className="h-4 w-4" /> {l.label}
+                </Link>
+              ))}
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

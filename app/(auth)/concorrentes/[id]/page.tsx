@@ -311,7 +311,7 @@ export default function ConcorrenteDetailPage() {
       </Card>
 
       {/* Papéis do cadastro único (produtor/cliente/fornecedor/transportador) */}
-      <PapeisEmpresa empresaId={id} />
+      <PapeisEmpresa empresaId={id} contexto="produtor" />
 
       {/* Toggle "nossa empresa (MBV)" */}
       <Card>

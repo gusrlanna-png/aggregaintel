@@ -384,7 +384,7 @@ export default function ClienteDetailPage() {
       )}
 
       {/* Papéis do cadastro único (produtor/cliente/fornecedor/transportador) */}
-      <PapeisEmpresa empresaId={id} />
+      <PapeisEmpresa empresaId={id} contexto="cliente" />
 
       {/* Quadro societário (sócios) — trazido pelo "Atualizar dados" */}
       {socios.length > 0 && (

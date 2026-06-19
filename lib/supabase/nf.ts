@@ -22,6 +22,7 @@ export interface NFFilters {
   data_fim?: string;
   revisado?: boolean;
   excluirDesconsideradas?: boolean;
+  busca?: string; // busca server-side em TODOS os campos da NF + emissor/cliente
   page?: number;
   pageSize?: number;
 }
@@ -74,6 +75,13 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
       rows = rows.filter((n) => Boolean(n.revisado) === filters.revisado);
     if (filters.excluirDesconsideradas)
       rows = rows.filter((n) => !n.desconsiderada);
+    if (filters.busca && filters.busca.trim()) {
+      const toks = filters.busca.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      rows = rows.filter((n) => {
+        const hay = JSON.stringify(n).toLowerCase();
+        return toks.every((t) => hay.includes(t));
+      });
+    }
     rows.sort((a, b) => (a.data_emissao < b.data_emissao ? 1 : -1));
     return { data: rows, count: rows.length };
   }
@@ -97,6 +105,12 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
     query = query.eq("revisado", filters.revisado);
   if (filters.excluirDesconsideradas)
     query = query.not("desconsiderada", "eq", true);
+  // Busca em todos os campos: cada termo precisa estar na coluna `busca` (AND).
+  if (filters.busca && filters.busca.trim()) {
+    for (const tok of filters.busca.trim().toLowerCase().split(/\s+/).filter(Boolean)) {
+      query = query.ilike("busca", `%${tok}%`);
+    }
+  }
 
   const { data, error, count } = await query;
   if (error) throw error;

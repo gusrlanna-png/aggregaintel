@@ -29,7 +29,7 @@ import {
   sortRows,
   useSort,
 } from "@/components/ui/sortable-table";
-import { BuscaTabela, matchBusca } from "@/components/ui/busca-tabela";
+import { BuscaTabela } from "@/components/ui/busca-tabela";
 import { getNFs } from "@/lib/supabase/nf";
 import { getEmissores } from "@/lib/supabase/emissores";
 import {
@@ -102,8 +102,16 @@ export default function NFListPage() {
     queryFn: () => getEmissores(),
   });
 
+  const [busca, setBusca] = React.useState("");
+  // Debounce da busca server-side (evita 1 query por tecla).
+  const [buscaQ, setBuscaQ] = React.useState("");
+  React.useEffect(() => {
+    const t = setTimeout(() => setBuscaQ(busca), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["nfs", produto, emissor, revisado, di, df],
+    queryKey: ["nfs", produto, emissor, revisado, di, df, buscaQ],
     queryFn: () =>
       getNFs({
         produto_tipo: produto === "all" ? undefined : produto,
@@ -111,26 +119,12 @@ export default function NFListPage() {
         revisado: revisado === "all" ? undefined : revisado === "sim",
         data_inicio: di || undefined,
         data_fim: df || undefined,
+        busca: buscaQ || undefined,
       }),
   });
 
-  const [busca, setBusca] = React.useState("");
   const { sort, toggle } = useSort<NFSortKey>("data", "desc");
-  const base = (data?.data ?? [])
-    .filter((nf) => !ocultarDesc || !nf.desconsiderada)
-    .filter((nf) =>
-      matchBusca(
-        busca,
-        nf.numero_nf,
-        nf.serie,
-        nf.emissor?.razao_social,
-        labelProduto(nf.produto_tipo),
-        nf.produto_desc,
-        nf.valor_total,
-        nf.valor_unitario,
-        nf.data_emissao
-      )
-    );
+  const base = (data?.data ?? []).filter((nf) => !ocultarDesc || !nf.desconsiderada);
   const nDesconsideradas = (data?.data ?? []).filter((n) => n.desconsiderada).length;
   const rows = sortRows(base, sort, nfSortValue);
 
@@ -155,7 +149,7 @@ export default function NFListPage() {
       <BuscaTabela
         value={busca}
         onChange={setBusca}
-        placeholder="Buscar NF: número, emissor, produto, valor…"
+        placeholder="Buscar em tudo: nº, emissor, cliente, transportador, motorista, produto, valor, chave…"
         id="nf"
       />
 

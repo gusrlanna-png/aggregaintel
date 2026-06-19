@@ -7,6 +7,8 @@ import {
   Building2,
   FileText,
   LayoutGrid,
+  Mail,
+  Network,
   Search,
   User,
   Users,
@@ -24,8 +26,12 @@ import { getProdutoresMercado } from "@/lib/supabase/emissores";
 import { getClientes } from "@/lib/supabase/clientes";
 import { getPessoas } from "@/lib/supabase/pessoas";
 import { searchNFs } from "@/lib/supabase/nf";
+import { buscarEmailIndice } from "@/lib/supabase/email-indice";
 import { mascararCnpj } from "@/lib/utils/cnpj";
 import { cn } from "@/lib/utils";
+
+const normTxt = (s: string) =>
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
 
 interface Resultado {
   href: string;
@@ -121,6 +127,11 @@ export function GlobalSearch({
     queryFn: () => searchNFs(q),
     enabled: open && q.trim().length >= 2,
   });
+  const { data: emails = [] } = useQuery({
+    queryKey: ["email-busca-global", q],
+    queryFn: () => buscarEmailIndice({ termo: q, limite: 6 }),
+    enabled: open && q.trim().length >= 2,
+  });
 
   const termo = q.trim();
   const temBusca = termo.length >= 1;
@@ -173,11 +184,40 @@ export function GlobalSearch({
   const nfRes: Resultado[] = nfs.slice(0, 6).map((n) => ({
     href: `/nf/${n.id}`,
     titulo: `NF ${n.numero_nf}${n.serie ? `/${n.serie}` : ""}`,
-    detalhe: [n.emissor?.razao_social, n.data_emissao].filter(Boolean).join(" · "),
+    detalhe: [n.emissor?.razao_social, n.cliente?.razao_social, n.data_emissao]
+      .filter(Boolean)
+      .join(" · "),
+  }));
+
+  // Grupos econômicos (derivados de clientes + produtores) → abre um membro.
+  const grupoRes: Resultado[] = temBusca
+    ? (() => {
+        const m = new Map<string, Resultado>();
+        for (const c of clientes) {
+          if (c.grupo_economico && matchBusca(termo, c.grupo_economico)) {
+            const k = normTxt(c.grupo_economico);
+            if (!m.has(k)) m.set(k, { href: `/clientes/${c.id}`, titulo: c.grupo_economico, detalhe: "Grupo econômico" });
+          }
+        }
+        for (const p of produtores) {
+          if (p.grupo_economico && matchBusca(termo, p.grupo_economico)) {
+            const k = normTxt(p.grupo_economico);
+            if (!m.has(k)) m.set(k, { href: `/concorrentes/${p.id}`, titulo: p.grupo_economico, detalhe: "Grupo econômico" });
+          }
+        }
+        return [...m.values()].slice(0, 6);
+      })()
+    : [];
+
+  const emailRes: Resultado[] = emails.slice(0, 6).map((e) => ({
+    href: e.pessoa_id ? `/pessoas/${e.pessoa_id}` : "/configuracoes/emails",
+    titulo: e.assunto || "(sem assunto)",
+    detalhe: [e.de_email, e.contato_email].filter(Boolean).join(" · "),
   }));
 
   const total =
-    paginas.length + prodRes.length + cliRes.length + pesRes.length + nfRes.length;
+    paginas.length + prodRes.length + cliRes.length + pesRes.length +
+    grupoRes.length + nfRes.length + emailRes.length;
 
   function pick(href: string) {
     setOpen(false);
@@ -241,8 +281,10 @@ export function GlobalSearch({
                 <Grupo titulo="Páginas" icon={LayoutGrid} itens={paginas} onPick={pick} />
                 <Grupo titulo="Produtores" icon={Building2} itens={prodRes} onPick={pick} />
                 <Grupo titulo="Clientes" icon={Users} itens={cliRes} onPick={pick} />
+                <Grupo titulo="Grupos econômicos" icon={Network} itens={grupoRes} onPick={pick} />
                 <Grupo titulo="Pessoas" icon={User} itens={pesRes} onPick={pick} />
                 <Grupo titulo="Notas Fiscais" icon={FileText} itens={nfRes} onPick={pick} />
+                <Grupo titulo="E-mails (M365)" icon={Mail} itens={emailRes} onPick={pick} />
               </>
             )}
           </div>

@@ -352,31 +352,16 @@ export async function searchNFs(
   const select =
     "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)";
 
-  // Por número exato (uso mais comum no balcão).
-  if (dig) {
-    const { data } = await supabase
-      .from("notas_fiscais")
-      .select(select)
-      .eq("numero_nf", Number(dig))
-      .order("data_emissao", { ascending: false })
-      .limit(limite);
-    return (data ?? []) as NotaFiscal[];
-  }
-
-  // Por nome do emissor (texto): resolve emissores e busca NFs deles.
-  const { data: ems } = await supabase
-    .from("emissores")
-    .select("id")
-    .ilike("razao_social", `%${q}%`)
-    .limit(5);
-  const ids = (ems ?? []).map((e) => e.id);
-  if (ids.length === 0) return [];
-  const { data } = await supabase
+  // Busca em todos os campos (coluna `busca`): cada termo precisa estar presente.
+  let query = supabase
     .from("notas_fiscais")
     .select(select)
-    .in("emissor_id", ids)
     .order("data_emissao", { ascending: false })
     .limit(limite);
+  for (const tok of q.toLowerCase().split(/\s+/).filter(Boolean)) {
+    query = query.ilike("busca", `%${tok}%`);
+  }
+  const { data } = await query;
   return (data ?? []) as NotaFiscal[];
 }
 

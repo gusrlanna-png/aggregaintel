@@ -10,6 +10,7 @@ import {
   Database,
   Gift,
   Mail,
+  MapPin,
   Merge,
   Package,
   ShieldCheck,
@@ -115,6 +116,13 @@ const GRUPOS: Grupo[] = [
         titulo: "Integração com o sistema",
         descricao:
           "Sincroniza clientes, produtos e propostas do sistema comercial (diário 01:00 + sob demanda).",
+      },
+      {
+        href: "/configuracoes/geocode",
+        icon: MapPin,
+        titulo: "Geocodificar endereços",
+        descricao:
+          "Localiza no mapa, em lote, os cadastros com endereço mas sem coordenada. Não altera coordenadas salvas manualmente.",
       },
     ],
   },

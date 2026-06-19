@@ -77,7 +77,7 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
   let query = supabase
     .from("notas_fiscais")
     .select(
-      "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)",
+      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)",
       { count: "exact" }
     )
     .order("data_emissao", { ascending: false })
@@ -114,7 +114,7 @@ export async function getNFsCliente(clienteId: string): Promise<NotaFiscal[]> {
   const { data, error } = await supabase
     .from("notas_fiscais")
     .select(
-      "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)"
+      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)"
     )
     .eq("cliente_id", clienteId)
     .not("desconsiderada", "eq", true)
@@ -132,7 +132,7 @@ export async function getNFById(id: string): Promise<NotaFiscal | null> {
   const { data, error } = await supabase
     .from("notas_fiscais")
     .select(
-      "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)"
+      "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)"
     )
     .eq("id", id)
     .maybeSingle();
@@ -333,7 +333,7 @@ export async function searchNFs(
 
   const supabase = createClient();
   const select =
-    "*, emissor:emissores(id, razao_social, municipio), cliente:clientes(id, razao_social, segmento)";
+    "*, emissor:empresas!notas_fiscais_emissor_id_fkey(id, razao_social, municipio), cliente:empresas!notas_fiscais_cliente_id_fkey(id, razao_social, segmento)";
 
   // Por número exato (uso mais comum no balcão).
   if (dig) {

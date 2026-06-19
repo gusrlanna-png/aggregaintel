@@ -99,7 +99,7 @@ export async function getEmpresasDaPessoa(pessoaId: string): Promise<EmpresaDaPe
   const s = createClient();
   const { data, error } = await s
     .from("socios")
-    .select("qualificacao, emissores(id, razao_social, cnpj, municipio, uf, grupo_economico)")
+    .select("qualificacao, emissores:empresas!socios_emissor_id_fkey(id, razao_social, cnpj, municipio, uf, grupo_economico)")
     .eq("pessoa_id", pessoaId);
   if (error) throw error;
   type Row = {

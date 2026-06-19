@@ -70,7 +70,7 @@ export async function getHistoricoBrindes(
   let q = supabase
     .from("brinde_movimentos")
     .select(
-      "*, brinde:brindes(nome), cliente:clientes(razao_social), pessoa:pessoas(nome)"
+      "*, brinde:brindes(nome), cliente:empresas!brinde_movimentos_cliente_id_fkey(razao_social), pessoa:pessoas(nome)"
     )
     .eq("tipo", "saida")
     .order("criado_em", { ascending: false })

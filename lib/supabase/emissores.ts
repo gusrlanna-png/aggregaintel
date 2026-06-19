@@ -396,23 +396,29 @@ export async function upsertEmissor(
     return localUpsert<Emissor>("emissores", row);
   }
   const supabase = createClient();
-  const payload = { ...data, atualizado_em: new Date().toISOString() };
-  // Registro existente: atualiza por id (evita colisão de PK com onConflict cnpj
-  // quando o emissor não tem CNPJ). Novo: upsert por cnpj (ou insert se cnpj nulo).
+  // Cadastro único: produtores vivem na tabela `empresas` com eh_produtor=true.
+  const payload: Record<string, unknown> = {
+    ...data,
+    eh_produtor: true,
+    atualizado_em: new Date().toISOString(),
+  };
+  // Registro existente: atualiza por id.
   if (payload.id) {
     const { id, ...rest } = payload;
     const { data: row, error } = await supabase
-      .from("emissores")
+      .from("empresas")
       .update(rest)
-      .eq("id", id)
+      .eq("id", id as string)
       .select()
       .single();
     if (error) throw error;
     return row as Emissor;
   }
+  // Novo produtor: insere em empresas (duplicidade por CNPJ é tratada pela
+  // ferramenta de mesclagem em Configurações).
   const { data: row, error } = await supabase
-    .from("emissores")
-    .upsert(payload, { onConflict: "cnpj" })
+    .from("empresas")
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;

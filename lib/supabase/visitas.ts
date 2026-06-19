@@ -114,7 +114,7 @@ export async function getVisitas(): Promise<Visita[]> {
   const { data, error } = await supabase
     .from("visitas")
     .select(
-      "*, cliente:clientes!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome)"
+      "*, cliente:empresas!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome)"
     )
     .order("checkin_at", { ascending: false })
     .limit(200);
@@ -152,7 +152,7 @@ export async function getVisitaById(id: string): Promise<{
       supabase
         .from("visitas")
         .select(
-          "*, cliente:clientes!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome), categoria:visita_categorias(nome)"
+          "*, cliente:empresas!visitas_cliente_id_fkey(razao_social), motivo:visita_motivos(nome), categoria:visita_categorias(nome)"
         )
         .eq("id", id)
         .maybeSingle(),
@@ -331,15 +331,16 @@ export async function cadastrarClientePendente(d: {
   if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
   const supabase = createClient();
   const { data, error } = await supabase
-    .from("clientes")
+    .from("empresas")
     .insert({
       razao_social: d.razao_social,
+      eh_cliente: true,
       segmento: d.segmento ?? "outro",
       municipio: d.municipio ?? null,
       uf: d.uf ?? null,
       lat: d.lat ?? null,
       lng: d.lng ?? null,
-      cliente_principal_id: d.cliente_principal_id ?? null,
+      empresa_principal_id: d.cliente_principal_id ?? null,
       dono_vendedor_id: d.dono_vendedor_id ?? null,
       status_validacao: "pendente",
       status: "ativo",

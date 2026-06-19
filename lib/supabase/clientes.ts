@@ -275,13 +275,22 @@ export async function upsertCliente(
     return localUpsert<Cliente>("clientes", row);
   }
   const supabase = createClient();
+  // Cadastro único: clientes vivem na tabela `empresas` com eh_cliente=true.
+  const { cliente_principal_id, ...rest } = data;
+  const payload: Record<string, unknown> = {
+    ...rest,
+    eh_cliente: true,
+    atualizado_em: new Date().toISOString(),
+  };
+  if (cliente_principal_id !== undefined) payload.empresa_principal_id = cliente_principal_id;
   const { data: row, error } = await supabase
-    .from("clientes")
-    .upsert({ ...data, atualizado_em: new Date().toISOString() })
+    .from("empresas")
+    .upsert(payload)
     .select()
     .single();
   if (error) throw error;
-  return row as Cliente;
+  const r = row as Record<string, unknown>;
+  return { ...r, cliente_principal_id: r.empresa_principal_id ?? null } as unknown as Cliente;
 }
 
 /** Raiz do CNPJ (8 primeiros dígitos) — identifica a empresa-mãe e filiais. */

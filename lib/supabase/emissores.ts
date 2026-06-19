@@ -1,5 +1,6 @@
 import { createClient } from "./client";
 import { isSupabaseConfigured } from "./config";
+import { findEmpresaIdByCnpj } from "./empresas";
 import type {
   CfemAnm,
   Emissor,
@@ -414,8 +415,21 @@ export async function upsertEmissor(
     if (error) throw error;
     return row as Emissor;
   }
-  // Novo produtor: insere em empresas (duplicidade por CNPJ é tratada pela
-  // ferramenta de mesclagem em Configurações).
+  // Find-or-create: se o CNPJ já existe (ex.: cadastrado como cliente), atualiza
+  // esse cadastro marcando eh_produtor (evita duplicar CNPJ / violar o índice único).
+  const existenteId = await findEmpresaIdByCnpj(data.cnpj);
+  if (existenteId) {
+    const { id, ...rest } = payload;
+    void id;
+    const { data: row, error } = await supabase
+      .from("empresas")
+      .update(rest)
+      .eq("id", existenteId)
+      .select()
+      .single();
+    if (error) throw error;
+    return row as Emissor;
+  }
   const { data: row, error } = await supabase
     .from("empresas")
     .insert(payload)

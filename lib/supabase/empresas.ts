@@ -21,6 +21,16 @@ export const PAPEIS_EMPRESA: { chave: keyof EmpresaPapeis; label: string; recurs
   { chave: "eh_transportador", label: "Transportador", recursos: "vínculo em fretes/NFs" },
 ];
 
+/** Localiza o id de uma empresa pelo CNPJ (dígitos). Base do find-or-create. */
+export async function findEmpresaIdByCnpj(cnpj: string | null | undefined): Promise<string | null> {
+  const dig = (cnpj ?? "").replace(/\D/g, "");
+  if (dig.length < 11 || !isSupabaseConfigured()) return null;
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("empresa_id_por_cnpj", { p_cnpj: dig });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
 export async function getEmpresaPapeis(id: string): Promise<EmpresaPapeis | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = createClient();

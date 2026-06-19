@@ -1,5 +1,6 @@
 import { createClient } from "./client";
 import { isSupabaseConfigured } from "./config";
+import { findEmpresaIdByCnpj } from "./empresas";
 import type { Cliente } from "./types";
 import {
   localGet,
@@ -283,6 +284,12 @@ export async function upsertCliente(
     atualizado_em: new Date().toISOString(),
   };
   if (cliente_principal_id !== undefined) payload.empresa_principal_id = cliente_principal_id;
+  // Find-or-create: se não veio id mas o CNPJ já existe (ex.: cadastrado como
+  // produtor), atualiza esse cadastro marcando eh_cliente (evita duplicar CNPJ).
+  if (!payload.id && data.cnpj) {
+    const existente = await findEmpresaIdByCnpj(data.cnpj);
+    if (existente) payload.id = existente;
+  }
   const { data: row, error } = await supabase
     .from("empresas")
     .upsert(payload)

@@ -111,6 +111,13 @@ const ITENS: ConfigItem[] = [
     descricao:
       "Encontra pessoas repetidas (mesmo CPF ou nome) e mescla num único cadastro, movendo vínculos, identidades e sociedades.",
   },
+  {
+    href: "/configuracoes/importar-contatos",
+    icon: Users,
+    titulo: "Importar contatos (CSV)",
+    descricao:
+      "Importa contatos de Google Contacts / celular (CSV) como pessoas, com telefones e e-mails. Ignora quem já existe (De→Para por nome).",
+  },
 ];
 
 export default function ConfiguracoesPage() {

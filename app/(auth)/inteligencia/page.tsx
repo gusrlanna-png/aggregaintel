@@ -185,6 +185,23 @@ export default function InteligenciaPage() {
       if (r.puladas) msg += ` · ${r.puladas} já existiam (não duplicadas)`;
       if (r.semCliente) msg += ` · ${r.semCliente} sem cliente cadastrado (lançadas como avulsa para revisar)`;
       toast.success(msg);
+
+      // Anexa as fotos/mídias do .zip do WhatsApp às visitas criadas (por data).
+      if (waFile && r.criadasInfo.length) {
+        const ehZip =
+          waFile.name.toLowerCase().endsWith(".zip") ||
+          waFile.type.includes("zip") ||
+          waFile.type === "application/octet-stream";
+        if (ehZip) {
+          try {
+            const { anexarMidiasWhatsapp } = await import("@/lib/import/whatsapp-midias");
+            const a = await anexarMidiasWhatsapp(waFile, r.criadasInfo);
+            if (a.anexadas > 0) toast.success(`${a.anexadas} mídia(s) anexada(s) às visitas.`);
+          } catch {
+            /* anexos são complementares — não bloqueiam a criação das visitas */
+          }
+        }
+      }
       if (r.semCadastro.length) {
         toast.message(`Clientes a cadastrar: ${r.semCadastro.slice(0, 6).join(", ")}${r.semCadastro.length > 6 ? "…" : ""}`);
       }

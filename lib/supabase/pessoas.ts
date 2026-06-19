@@ -673,6 +673,60 @@ export async function getPessoasDuplicadas(): Promise<GrupoPessoaDuplicada[]> {
     .sort((a, b) => b.membros.length - a.membros.length);
 }
 
+/**
+ * Importa contatos (de CSV) com De→Para por nome normalizado: contatos já
+ * existentes são pulados (dedup); novos viram pessoas, com telefones/e-mails.
+ */
+export async function importarContatosCsv(
+  rows: { nome: string; fones: string[]; emails: string[]; empresa?: string | null; cargo?: string | null }[]
+): Promise<{ criados: number; pulados: number; erros: number }> {
+  if (!isSupabaseConfigured()) throw new Error("Supabase não configurado");
+  const norm = (s: string) =>
+    (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+  const existentes = await getPessoas();
+  const indice = new Set(existentes.map((p) => norm(p.nome)));
+
+  let criados = 0;
+  let pulados = 0;
+  let erros = 0;
+  for (const r of rows) {
+    const nome = (r.nome ?? "").trim();
+    if (!nome) continue;
+    if (indice.has(norm(nome))) {
+      pulados++;
+      continue;
+    }
+    try {
+      const notas = [r.empresa, r.cargo].filter(Boolean).join(" · ") || null;
+      const id = await criarPessoa({
+        nome,
+        fone: r.fones[0] ?? null,
+        email: r.emails[0] ?? null,
+        notas,
+      });
+      for (const f of r.fones.slice(1)) {
+        try {
+          await addPessoaTelefone(id, { tipo: "celular", numero: f });
+        } catch {
+          /* ignora telefone duplicado/ inválido */
+        }
+      }
+      for (const e of r.emails.slice(1)) {
+        try {
+          await addPessoaEmail(id, { email: e });
+        } catch {
+          /* ignora email duplicado/ inválido */
+        }
+      }
+      indice.add(norm(nome));
+      criados++;
+    } catch {
+      erros++;
+    }
+  }
+  return { criados, pulados, erros };
+}
+
 /** Mescla pessoas duplicadas no mestre (RPC mesclar_pessoas). */
 export async function mesclarPessoas(masterId: string, dupIds: string[]): Promise<void> {
   if (!isSupabaseConfigured()) return;

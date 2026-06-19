@@ -266,9 +266,21 @@ export interface VisitaWhatsappCandidata {
  * (cliente_nome_livre) para revisão. Dedup: não duplica na reimportação (índice
  * único por origem+origem_ref = cliente|data).
  */
+export interface VisitaCriadaWa {
+  id: string;
+  cliente_id: string | null;
+  data: string | null;
+}
+
 export async function criarVisitasDeWhatsapp(
   candidatos: VisitaWhatsappCandidata[]
-): Promise<{ criadas: number; puladas: number; semCliente: number; semCadastro: string[] }> {
+): Promise<{
+  criadas: number;
+  puladas: number;
+  semCliente: number;
+  semCadastro: string[];
+  criadasInfo: VisitaCriadaWa[];
+}> {
   if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
   const supabase = createClient();
   const { getClientes } = await import("./clientes");
@@ -279,6 +291,7 @@ export async function criarVisitasDeWhatsapp(
   let puladas = 0;
   let semCliente = 0;
   const semCadastro: string[] = [];
+  const criadasInfo: VisitaCriadaWa[] = [];
 
   for (const c of candidatos) {
     const nome = (c.cliente_nome ?? "").trim();
@@ -297,24 +310,29 @@ export async function criarVisitasDeWhatsapp(
       if (!semCadastro.includes(nome)) semCadastro.push(nome);
     }
 
-    const { error } = await supabase.from("visitas").insert({
-      cliente_id: match?.id ?? null,
-      cliente_nome_livre: match ? null : nome,
-      avulsa: !match,
-      observacoes: c.resumo ?? null,
-      perda_venda: !!c.perda_venda,
-      checkin_at: checkin,
-      origem: "whatsapp",
-      origem_ref,
-    });
+    const { data: nova, error } = await supabase
+      .from("visitas")
+      .insert({
+        cliente_id: match?.id ?? null,
+        cliente_nome_livre: match ? null : nome,
+        avulsa: !match,
+        observacoes: c.resumo ?? null,
+        perda_venda: !!c.perda_venda,
+        checkin_at: checkin,
+        origem: "whatsapp",
+        origem_ref,
+      })
+      .select("id")
+      .single();
     if (error) {
       // 23505 = índice único (já importada) → pula sem erro
       puladas++;
       continue;
     }
     criadas++;
+    if (nova) criadasInfo.push({ id: (nova as { id: string }).id, cliente_id: match?.id ?? null, data });
   }
-  return { criadas, puladas, semCliente, semCadastro };
+  return { criadas, puladas, semCliente, semCadastro, criadasInfo };
 }
 
 /** Cadastra um cliente novo a partir do campo (fica pendente de validação). */

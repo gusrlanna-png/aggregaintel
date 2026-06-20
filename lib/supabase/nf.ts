@@ -106,9 +106,11 @@ export async function getNFs(filters: NFFilters = {}): Promise<{
     query = query.eq("revisado", filters.revisado);
   if (filters.excluirDesconsideradas)
     query = query.not("desconsiderada", "eq", true);
-  // Busca em todos os campos: cada termo precisa estar na coluna `busca` (AND).
+  // Busca em todos os campos: cada termo (sem acento) precisa estar na `busca` (AND).
   if (filters.busca && filters.busca.trim()) {
-    for (const tok of filters.busca.trim().toLowerCase().split(/\s+/).filter(Boolean)) {
+    const semAcento = (s: string) =>
+      s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    for (const tok of semAcento(filters.busca.trim()).split(/\s+/).filter(Boolean)) {
       query = query.ilike("busca", `%${tok}%`);
     }
   }
@@ -359,7 +361,8 @@ export async function searchNFs(
     .select(select)
     .order("data_emissao", { ascending: false })
     .limit(limite);
-  for (const tok of q.toLowerCase().split(/\s+/).filter(Boolean)) {
+  const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  for (const tok of semAcento(q).split(/\s+/).filter(Boolean)) {
     query = query.ilike("busca", `%${tok}%`);
   }
   const { data } = await query;

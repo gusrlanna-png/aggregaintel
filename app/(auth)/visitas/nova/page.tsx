@@ -244,6 +244,23 @@ export default function NovaVisitaPage() {
   React.useEffect(() => {
     setEnderecoId("");
   }, [clienteId]);
+  // Obras ordenadas por proximidade do aparelho (quando há GPS + coordenada).
+  const enderecosOrdenados = React.useMemo(() => {
+    return [...enderecosCliente]
+      .map((e) => ({
+        e,
+        dist:
+          coords && e.lat != null && e.lng != null
+            ? distanciaMetros(coords.lat, coords.lng, e.lat, e.lng)
+            : null,
+      }))
+      .sort((a, b) => {
+        if (a.dist == null && b.dist == null) return 0;
+        if (a.dist == null) return 1;
+        if (b.dist == null) return -1;
+        return a.dist - b.dist;
+      });
+  }, [enderecosCliente, coords]);
 
   const pegarLocal = React.useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -569,13 +586,14 @@ export default function NovaVisitaPage() {
                       <SelectItem value="none">
                         — Sede / sem obra específica
                       </SelectItem>
-                      {enderecosCliente.map((e) => (
+                      {enderecosOrdenados.map(({ e, dist }) => (
                         <SelectItem key={e.id} value={e.id}>
                           {(e.nome || e.logradouro || "Endereço") +
                             (e.tipo
                               ? ` · ${TIPOS_ENDERECO[e.tipo] ?? e.tipo}`
                               : "") +
-                            (e.municipio ? ` · ${e.municipio}` : "")}
+                            (e.municipio ? ` · ${e.municipio}` : "") +
+                            (dist != null ? ` · ${(dist / 1000).toFixed(1)} km` : "")}
                         </SelectItem>
                       ))}
                     </SelectContent>

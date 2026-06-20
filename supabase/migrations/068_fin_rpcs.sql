@@ -1,0 +1,1 @@
+-- RPCs fin_buscar_clientes + fin_ficha_credito (security definer; ver migração aplicada via MCP).

@@ -366,6 +366,20 @@ export async function searchNFs(
   return (data ?? []) as NotaFiscal[];
 }
 
+/** Define manualmente a obra/endereço de entrega de uma NF. */
+export async function setNFEndereco(id: string, enderecoId: string | null): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    localUpdate<NotaFiscal>("notas_fiscais", id, { endereco_id: enderecoId });
+    return;
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("notas_fiscais")
+    .update({ endereco_id: enderecoId })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** Marca (ou desmarca) uma NF como desconsiderada — excluída de todos os cálculos. */
 export async function toggleDesconsiderada(id: string, valor: boolean): Promise<void> {
   if (!isSupabaseConfigured()) {

@@ -18,6 +18,7 @@ import {
 import { getNFById, toggleDesconsiderada } from "@/lib/supabase/nf";
 import { getNFUrl } from "@/lib/supabase/storage";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
+import { NfObraSelect } from "@/components/nf/nf-obra-select";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
   fmtReais,
@@ -208,17 +209,7 @@ export default function NFDetailPage() {
               <Row label="Município emissor" value={n.emissor?.municipio} />
               <Row label="Cliente" value={n.cliente?.razao_social} />
               <Row label="Endereço de entrega" value={n.end_entrega} />
-              {n.endereco && (
-                <Row
-                  label="Obra / usina"
-                  value={[
-                    n.endereco.nome,
-                    [n.endereco.bairro, n.endereco.municipio].filter(Boolean).join(" · "),
-                  ]
-                    .filter(Boolean)
-                    .join(" — ")}
-                />
-              )}
+              <NfObraSelect nfId={n.id} clienteId={n.cliente_id ?? null} enderecoId={n.endereco_id ?? null} />
               <Row label="CFOP" value={n.cfop} />
               <Row label="Natureza" value={n.natureza_op} />
             </CardContent>

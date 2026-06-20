@@ -131,18 +131,11 @@ const GRUPOS: Grupo[] = [
     descricao: "Encontrar e mesclar cadastros repetidos.",
     itens: [
       {
-        href: "/configuracoes/clientes-duplicados",
+        href: "/configuracoes/duplicados",
         icon: Merge,
-        titulo: "Clientes duplicados",
+        titulo: "Cadastros duplicados",
         descricao:
-          "Encontra clientes repetidos pelo mesmo CNPJ e mescla, movendo NFs, visitas e contatos.",
-      },
-      {
-        href: "/configuracoes/pessoas-duplicadas",
-        icon: Merge,
-        titulo: "Pessoas duplicadas",
-        descricao:
-          "Encontra pessoas repetidas (mesmo CPF/nome) e mescla, movendo vínculos, identidades e sociedades.",
+          "Clientes (mesmo CNPJ) e pessoas (mesmo CPF/nome) numa página só, em abas. Mescla movendo NFs, visitas, contatos, identidades e sociedades.",
       },
     ],
   },

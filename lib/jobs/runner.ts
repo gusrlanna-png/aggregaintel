@@ -10,6 +10,35 @@ import { investigarEmpresaWeb } from "@/lib/ai/investigacao";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Geocodifica um endereço via Nominatim/OSM (server-side). */
+async function geocodeEndereco(addr: {
+  logradouro?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  cep?: string | null;
+}): Promise<{ lat: number; lng: number } | null> {
+  const cep = (addr.cep ?? "").replace(/\D/g, "");
+  const street = (addr.logradouro ?? "").trim();
+  if (!addr.municipio && !cep && !street) return null;
+  const headers = { "User-Agent": "AggregaIntel/1.0 (geocode cascade)", "Accept-Language": "pt-BR" };
+  const base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br";
+  const p = new URLSearchParams();
+  if (street) p.set("street", street);
+  if (addr.municipio) p.set("city", addr.municipio);
+  if (addr.uf) p.set("state", addr.uf);
+  if (cep) p.set("postalcode", cep);
+  try {
+    const res = await fetch(`${base}&${p.toString()}`, { headers });
+    if (!res.ok) return null;
+    const arr = (await res.json()) as { lat: string; lon: string }[];
+    if (!arr?.length) return null;
+    const lat = Number(arr[0].lat), lng = Number(arr[0].lon);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  } catch {
+    return null;
+  }
+}
+
 type Sb = SupabaseClient;
 
 interface JobRow {
@@ -148,6 +177,32 @@ const HANDLERS: Record<
           sb
         );
         okCad++;
+        // Geocodifica o endereço (referencial no mapa); não sobrescreve manual.
+        try {
+          const coord = await geocodeEndereco({
+            logradouro: c.logradouro,
+            municipio: c.municipio,
+            uf: c.uf,
+            cep: c.cep,
+          });
+          if (coord) {
+            const { data: cur } = await sb
+              .from("empresas")
+              .select("coord_manual")
+              .eq("id", emp.id)
+              .maybeSingle();
+            const patch: Record<string, unknown> = {
+              endereco_lat: coord.lat,
+              endereco_lng: coord.lng,
+              geocode_tentado: new Date().toISOString(),
+            };
+            if (!(cur as { coord_manual?: boolean } | null)?.coord_manual) {
+              patch.lat = coord.lat;
+              patch.lng = coord.lng;
+            }
+            await sb.from("empresas").update(patch).eq("id", emp.id);
+          }
+        } catch {/* geocode é complementar */}
         const socios = c.socios ?? [];
         await salvarSocios(emp.id, socios, sb);
         okSoc++;

@@ -1,9 +1,40 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { conversarLLM } from "@/lib/ai/chat-llm";
+import { conversarLLM, responderLLM } from "@/lib/ai/chat-llm";
 import { processJob } from "@/lib/jobs/runner";
 import { gerarPlanoDev } from "@/lib/dev/plano";
+
+type SbAny = ReturnType<typeof createClient>;
+
+/** Snapshot compacto de números reais do sistema p/ embasar respostas. */
+async function montarSnapshot(supabase: SbAny): Promise<string> {
+  try {
+    const head = (q: ReturnType<SbAny["from"]>) => q;
+    const [cli, prod, nfs, pes, vis, top] = await Promise.all([
+      supabase.from("empresas").select("id", { count: "exact", head: true }).eq("eh_cliente", true),
+      supabase.from("empresas").select("id", { count: "exact", head: true }).eq("eh_produtor", true),
+      supabase.from("notas_fiscais").select("id", { count: "exact", head: true }),
+      supabase.from("pessoas").select("id", { count: "exact", head: true }),
+      supabase.from("visitas").select("id", { count: "exact", head: true }),
+      supabase.rpc("nf_realizado_emissor", { p_ano: null }),
+    ]);
+    void head;
+    const topTxt = (((top.data as { razao_social: string; ton: number; nfs: number }[]) ?? []) || [])
+      .slice(0, 5)
+      .map((p) => `  • ${p.razao_social}: ${Math.round(Number(p.ton))} t (${p.nfs} NFs)`)
+      .join("\n");
+    return [
+      "Números atuais do sistema (use para responder com dados reais):",
+      `- Clientes: ${cli.count ?? "?"} · Produtores: ${prod.count ?? "?"} · NFs: ${nfs.count ?? "?"} · Pessoas: ${pes.count ?? "?"} · Visitas: ${vis.count ?? "?"}`,
+      topTxt ? `- Maiores produtores por volume (NFs):\n${topTxt}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -181,6 +212,21 @@ Siga boas práticas de desenvolvimento e eficiência; busque o objetivo do usuá
       { papel: "assistant", conteudo: resposta, contexto: ctx, acao: acaoExec, provedor, criado_por: session.user.id },
     ]);
     return NextResponse.json({ resposta, provedor, acao: acaoExec });
+  }
+
+  // Resposta conversacional rica (assistente): texto livre embasado em dados.
+  if (decisao.acao === "responder") {
+    try {
+      const snapshot = await montarSnapshot(supabase);
+      const sysResp = `Você é o assistente do AggregaIntel (inteligência de mercado de agregados). Responda em pt-BR, de forma direta, útil e honesta. Pode explicar funcionalidades, interpretar dados e orientar o uso do sistema. Se não tiver o dado exato, diga onde encontrá-lo no app (ex.: Mapa, Projeção, NFs). Não invente números.
+Contexto da página: ${ctx.pagina ?? ctx.pathname ?? "—"}${ctx.entidade_tipo ? ` (${ctx.entidade_tipo}${ctx.nome ? ` "${ctx.nome}"` : ""})` : ""}.
+${snapshot ? snapshot + "\n" : ""}${historico ? `Conversa recente:\n${historico}` : ""}`;
+      const r = await responderLLM(sysResp, mensagem);
+      resposta = r.raw.trim() || resposta;
+      provedor = r.provedor;
+    } catch {
+      /* mantém a resposta curta da classificação */
+    }
   }
 
   if (decisao.acao === "disparar" && decisao.agente) {

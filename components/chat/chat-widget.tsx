@@ -73,6 +73,9 @@ export function ChatWidget() {
   const [gravando, setGravando] = React.useState(false);
   const [transcrevendo, setTranscrevendo] = React.useState(false);
   const fimRef = React.useRef<HTMLDivElement>(null);
+  const taRef = React.useRef<HTMLTextAreaElement>(null);
+  const filaRef = React.useRef<string[]>([]);
+  const drenandoRef = React.useRef(false);
   const recRef = React.useRef<unknown>(null);
   const mediaRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
@@ -225,28 +228,43 @@ export function ChatWidget() {
       });
   }, [aberto, msgs.length]);
 
-  async function enviar() {
-    const m = texto.trim();
-    if (!m || enviando) return;
-    setTexto("");
-    setMsgs((prev) => [...prev, { papel: "user", conteudo: m }]);
+  // Processa a fila de mensagens em sequência (assíncrono): o usuário pode
+  // enviar várias seguidas sem esperar a resposta de cada uma.
+  const drenar = React.useCallback(async () => {
+    if (drenandoRef.current) return;
+    drenandoRef.current = true;
     setEnviando(true);
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensagem: m, contexto: contextoDaRota(pathname) }),
-      });
-      const json = await res.json().catch(() => ({}));
-      const resposta = json.resposta ?? json.error ?? "Não consegui responder agora.";
-      setMsgs((prev) => [...prev, { papel: "assistant", conteudo: resposta, provedor: json.provedor }]);
-      // Se disparou um agente, atualiza o indicador de tarefas.
-      if (json.acao) qc.invalidateQueries({ queryKey: ["jobs-recentes"] });
-    } catch {
-      setMsgs((prev) => [...prev, { papel: "assistant", conteudo: "Erro de conexão. Tente novamente." }]);
+      while (filaRef.current.length > 0) {
+        const m = filaRef.current.shift() as string;
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mensagem: m, contexto: contextoDaRota(pathname) }),
+          });
+          const json = await res.json().catch(() => ({}));
+          const resposta = json.resposta ?? json.error ?? "Não consegui responder agora.";
+          setMsgs((prev) => [...prev, { papel: "assistant", conteudo: resposta, provedor: json.provedor }]);
+          if (json.acao) qc.invalidateQueries({ queryKey: ["jobs-recentes"] });
+        } catch {
+          setMsgs((prev) => [...prev, { papel: "assistant", conteudo: "Erro de conexão. Tente novamente." }]);
+        }
+      }
     } finally {
+      drenandoRef.current = false;
       setEnviando(false);
     }
+  }, [pathname, qc]);
+
+  function enviar() {
+    const m = texto.trim();
+    if (!m) return;
+    setTexto("");
+    if (taRef.current) taRef.current.style.height = "auto";
+    setMsgs((prev) => [...prev, { papel: "user", conteudo: m }]);
+    filaRef.current.push(m);
+    void drenar();
   }
 
   return (
@@ -317,10 +335,22 @@ export function ChatWidget() {
                 <Mic className={cn("h-4 w-4", gravando && "animate-pulse")} />
               )}
             </button>
-            <input
+            <textarea
+              ref={taRef}
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), enviar())}
+              rows={1}
+              onChange={(e) => {
+                setTexto(e.target.value);
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 72) + "px"; // até ~3 linhas
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  enviar();
+                }
+              }}
               placeholder={
                 transcrevendo
                   ? "Transcrevendo o áudio…"
@@ -328,13 +358,14 @@ export function ChatWidget() {
                     ? "Gravando… toque no 🎤 para parar"
                     : "Pergunte, peça uma ação ou fale 🎤"
               }
-              className="h-9 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-primary"
+              className="max-h-[72px] min-h-9 flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
             />
             <button
               onClick={enviar}
-              disabled={enviando || !texto.trim()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+              disabled={!texto.trim()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-md bg-primary text-primary-foreground disabled:opacity-50"
               aria-label="Enviar"
+              title="Enviar (Enter). Pode enviar várias seguidas — entram na fila."
             >
               <Send className="h-4 w-4" />
             </button>

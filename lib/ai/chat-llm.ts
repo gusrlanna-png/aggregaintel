@@ -21,7 +21,7 @@ export interface RespostaLLM {
   provedor: "gemini" | "groq" | "qwen" | "heuristica";
 }
 
-async function chamarGroq(system: string, user: string): Promise<string> {
+async function chamarGroq(system: string, user: string, json = true): Promise<string> {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error("sem GROQ_API_KEY");
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -29,8 +29,8 @@ async function chamarGroq(system: string, user: string): Promise<string> {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: GROQ_MODEL,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
+      temperature: json ? 0.2 : 0.4,
+      ...(json ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -44,7 +44,7 @@ async function chamarGroq(system: string, user: string): Promise<string> {
   return txt;
 }
 
-async function chamarGemini(system: string, user: string): Promise<string> {
+async function chamarGemini(system: string, user: string, json = true): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("sem GEMINI_API_KEY");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
@@ -54,7 +54,10 @@ async function chamarGemini(system: string, user: string): Promise<string> {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ parts: [{ text: user }] }],
-      generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+      generationConfig: {
+        temperature: json ? 0.2 : 0.4,
+        ...(json ? { responseMimeType: "application/json" } : {}),
+      },
     }),
   });
   if (!res.ok) throw new Error(`gemini ${res.status}`);
@@ -68,7 +71,7 @@ async function chamarGemini(system: string, user: string): Promise<string> {
   return txt;
 }
 
-async function chamarOllama(system: string, user: string): Promise<string> {
+async function chamarOllama(system: string, user: string, json = true): Promise<string> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 120000); // CPU + prompt grande pode demorar
   try {
@@ -79,9 +82,9 @@ async function chamarOllama(system: string, user: string): Promise<string> {
       body: JSON.stringify({
         model: OLLAMA_MODEL,
         stream: false,
-        format: "json",
+        ...(json ? { format: "json" } : {}),
         keep_alive: "30m", // mantém o modelo carregado p/ respostas rápidas
-        options: { temperature: 0.2 },
+        options: { temperature: json ? 0.2 : 0.4 },
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -114,6 +117,26 @@ export async function conversarLLM(system: string, user: string): Promise<Respos
     return { raw: await chamarOllama(system, user), provedor: "qwen" };
   } catch {
     /* cai na heurística */
+  }
+  throw new Error("Nenhum provedor de IA disponível.");
+}
+
+/** Resposta em TEXTO LIVRE (assistente conversacional), mesma cascata grátis. */
+export async function responderLLM(system: string, user: string): Promise<RespostaLLM> {
+  try {
+    return { raw: await chamarGemini(system, user, false), provedor: "gemini" };
+  } catch {
+    /* tenta Groq */
+  }
+  try {
+    return { raw: await chamarGroq(system, user, false), provedor: "groq" };
+  } catch {
+    /* tenta Qwen local */
+  }
+  try {
+    return { raw: await chamarOllama(system, user, false), provedor: "qwen" };
+  } catch {
+    /* sem IA */
   }
   throw new Error("Nenhum provedor de IA disponível.");
 }

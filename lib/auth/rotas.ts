@@ -1,12 +1,20 @@
 /**
- * Controle de acesso por perfil (RBAC).
- * - admin / gestor: acesso total.
- * - vendedor: apenas as rotas da allowlist (campo + entrada de informação).
- * Importável pelo middleware (sem dependências de cliente).
+ * Controle de acesso por perfil (RBAC) — organizado por MÓDULOS de negócio.
+ * - admin / gestor: acesso total (todos os módulos).
+ * - vendedor / gerente: módulo Comercial (campo, clientes, visitas).
+ * - analista_inteligencia: módulo Inteligência de Mercado (IDM).
+ * - financeiro: módulo Financeiro.
+ * Importável pelo middleware (sem dependências de cliente). O banco
+ * (perfil_rotas + pode_ver_rota) é a fonte da verdade; isto é o fallback.
  */
-export type Perfil = "admin" | "gestor" | "vendedor";
+export type Perfil =
+  | "admin"
+  | "gestor"
+  | "vendedor"
+  | "analista_inteligencia"
+  | "financeiro";
 
-/** Prefixos de rota liberados para o perfil "vendedor". */
+/** Comercial — vendedor/gerente em campo. */
 export const ROTAS_VENDEDOR = [
   "/dashboard",
   "/visitas",
@@ -15,16 +23,38 @@ export const ROTAS_VENDEDOR = [
   "/inteligencia",
 ];
 
+/** Inteligência de Mercado (IDM). */
+export const ROTAS_ANALISTA = [
+  "/dashboard",
+  "/mapa",
+  "/concorrentes",
+  "/mercados",
+  "/mercado",
+  "/inteligencia",
+  "/projecao",
+  "/ranking",
+  "/cfem",
+  "/produtos",
+  "/nf",
+  "/grupos",
+];
+
+/** Financeiro. */
+export const ROTAS_FINANCEIRO = ["/dashboard", "/financeiro"];
+
+const ALLOWLIST: Record<string, string[]> = {
+  vendedor: ROTAS_VENDEDOR,
+  analista_inteligencia: ROTAS_ANALISTA,
+  financeiro: ROTAS_FINANCEIRO,
+};
+
 export function podeAcessar(perfil: Perfil | null, pathname: string): boolean {
   if (perfil === "admin" || perfil === "gestor") return true;
-  // Apenas o perfil "vendedor" confirmado fica restrito à allowlist.
-  if (perfil === "vendedor") {
-    return ROTAS_VENDEDOR.some(
-      (r) => pathname === r || pathname.startsWith(r + "/")
-    );
+  const lista = perfil ? ALLOWLIST[perfil] : null;
+  if (lista) {
+    return lista.some((r) => pathname === r || pathname.startsWith(r + "/"));
   }
   // Perfil indeterminado (ex.: meu_perfil() falhou transitoriamente): NÃO
-  // derruba o usuário autenticado para o dashboard — os dados seguem
-  // protegidos por RLS. Evita o bounce indevido de admins em /configuracoes/*.
+  // derruba o usuário autenticado — os dados seguem protegidos por RLS.
   return true;
 }

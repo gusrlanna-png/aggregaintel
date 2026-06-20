@@ -31,7 +31,9 @@ import type { Perfil } from "@/lib/auth/rotas";
 const PERFIS: { v: Perfil; label: string; hint: string }[] = [
   { v: "admin", label: "Admin", hint: "acesso total + gestão de usuários" },
   { v: "gestor", label: "Gestor", hint: "acesso total ao sistema" },
-  { v: "vendedor", label: "Vendedor", hint: "campo: visitas, clientes, pessoas, intel" },
+  { v: "vendedor", label: "Vendedor", hint: "Comercial: visitas, clientes, pessoas" },
+  { v: "analista_inteligencia", label: "Analista (IDM)", hint: "Inteligência de Mercado: mapa, produtores, projeção, intel" },
+  { v: "financeiro", label: "Financeiro", hint: "Módulo financeiro (análise de crédito)" },
 ];
 
 function fmt(ts: string | null) {

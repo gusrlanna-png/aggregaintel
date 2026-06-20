@@ -12,6 +12,7 @@ import {
   Settings,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/clientes", icon: Users, label: "Clientes" },
   { href: "/pessoas", icon: User, label: "Contatos" },
   { href: "/inteligencia", icon: Brain, label: "Intel" },
+  { href: "/financeiro", icon: Wallet, label: "Financeiro" },
   { href: "/configuracoes", icon: Settings, label: "Config" },
 ];
 

@@ -23,13 +23,17 @@ const SECOES: { prefixo: string; label: string }[] = [
   { prefixo: "/projecao", label: "Projeção" },
   { prefixo: "/vendas", label: "Planejamento / Vendas" },
   { prefixo: "/mapa", label: "Mapa" },
+  { prefixo: "/mercados", label: "Mercados" },
+  { prefixo: "/cfem", label: "CFEM / ANM" },
+  { prefixo: "/grupos", label: "Grupos econômicos" },
   { prefixo: "/produtos", label: "Produtos" },
   { prefixo: "/ranking", label: "Ranking" },
+  { prefixo: "/financeiro", label: "Financeiro" },
   { prefixo: "/configuracoes", label: "Configurações" },
 ];
 
 // Perfis restringíveis (admin e gestor têm acesso total por definição).
-const PERFIS_EDITAVEIS = ["vendedor"];
+const PERFIS_EDITAVEIS = ["vendedor", "analista_inteligencia", "financeiro"];
 
 export default function PermissoesPage() {
   const qc = useQueryClient();

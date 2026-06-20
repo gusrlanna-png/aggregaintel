@@ -5,6 +5,7 @@ export interface GraphMessage {
   receivedDateTime: string;
   isRead: boolean;
   isDraft: boolean;
+  hasAttachments?: boolean;
   from: {
     emailAddress: { name: string; address: string };
   } | null;
@@ -44,7 +45,7 @@ export async function fetchEmailsByContact(
     $search: search,
     $top: String(limit),
     $select:
-      "id,subject,bodyPreview,receivedDateTime,isRead,isDraft,from,toRecipients,webLink",
+      "id,subject,bodyPreview,receivedDateTime,isRead,isDraft,hasAttachments,from,toRecipients,webLink",
   });
 
   const res = await fetch(
@@ -98,6 +99,19 @@ export async function fetchEmailBody(
     throw new Error(`Graph Mail error ${res.status}: ${text}`);
   }
   return (await res.json()) as GraphMessageBody;
+}
+
+/** Extrai telefones brasileiros de um texto/HTML (para sugerir ao cadastro). */
+export function extrairTelefones(texto: string): string[] {
+  const limpo = (texto ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+  const re = /(?:\+?55\s?)?(?:\(?\d{2}\)?[\s.-]?)?(?:9\s?)?\d{4}[\s.-]?\d{4}/g;
+  const achados = (limpo.match(re) ?? [])
+    .map((s) => s.trim())
+    .filter((s) => {
+      const d = s.replace(/\D/g, "");
+      return d.length >= 10 && d.length <= 13; // fixo/celular BR (com/sem DDI)
+    });
+  return [...new Set(achados)].slice(0, 10);
 }
 
 /** Formata data de e-mail para exibição compacta. */

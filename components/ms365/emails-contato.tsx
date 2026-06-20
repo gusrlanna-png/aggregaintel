@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, Loader2, Mail, RefreshCw, Search, X } from "lucide-react";
+import { ExternalLink, Loader2, Mail, Paperclip, Phone, RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,11 +12,13 @@ import { useMs365 } from "@/hooks/use-ms365";
 import {
   fetchEmailsByContact,
   fetchEmailBody,
+  extrairTelefones,
   fmtDataEmail,
   type GraphMessage,
   type GraphMessageBody,
 } from "@/lib/graph/mail";
 import { indexarEmailsContato } from "@/lib/supabase/email-indice";
+import { adicionarDadosContato } from "@/lib/supabase/pessoas";
 
 interface Props {
   email: string;
@@ -181,7 +184,8 @@ export function EmailsContato({ email, pessoaId }: Props) {
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="text-[11px] tabular-nums text-muted-foreground">
+                <span className="flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+                  {m.hasAttachments && <Paperclip className="h-3 w-3" />}
                   {fmtDataEmail(m.receivedDateTime)}
                 </span>
                 {m.isDraft && (
@@ -242,6 +246,11 @@ export function EmailsContato({ email, pessoaId }: Props) {
                     </button>
                   </div>
                 </div>
+                {/* Telefones detectados no corpo (ao vivo, não armazenado) */}
+                <TelefonesDetectados
+                  texto={aberto.body?.content ?? ""}
+                  pessoaId={pessoaId}
+                />
                 {/* iframe isolado (sandbox sem scripts) p/ renderizar o e-mail com segurança */}
                 <iframe
                   title="Conteúdo do e-mail"
@@ -259,6 +268,44 @@ export function EmailsContato({ email, pessoaId }: Props) {
             ) : null}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Telefones detectados no corpo do e-mail (ao vivo). Permite levar ao cadastro. */
+function TelefonesDetectados({ texto, pessoaId }: { texto: string; pessoaId?: string }) {
+  const fones = React.useMemo(() => extrairTelefones(texto), [texto]);
+  const [salvando, setSalvando] = React.useState(false);
+  const [feito, setFeito] = React.useState(false);
+  if (fones.length === 0) return null;
+
+  async function adicionar() {
+    if (!pessoaId) return;
+    setSalvando(true);
+    try {
+      const r = await adicionarDadosContato(pessoaId, { fones });
+      setFeito(true);
+      toast.success(r.fones ? `${r.fones} telefone(s) adicionado(s).` : "Telefones já cadastrados.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao adicionar.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2 text-xs">
+      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="text-muted-foreground">Telefones no e-mail:</span>
+      {fones.map((f) => (
+        <Badge key={f} variant="secondary" className="font-normal">{f}</Badge>
+      ))}
+      {pessoaId && !feito && (
+        <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={adicionar} disabled={salvando}>
+          {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          Adicionar ao cadastro
+        </Button>
       )}
     </div>
   );

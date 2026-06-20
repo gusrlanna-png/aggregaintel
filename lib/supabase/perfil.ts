@@ -106,6 +106,19 @@ export async function atualizarUsuario(
   if (error) throw error;
 }
 
+/** Quantos acessos estão aguardando aprovação (pendentes: inativos nunca aprovados). */
+export async function contarAcessosPendentes(): Promise<number> {
+  if (!isSupabaseConfigured()) return 0;
+  const supabase = createClient();
+  const { count, error } = await supabase
+    .from("app_usuarios")
+    .select("id", { count: "exact", head: true })
+    .eq("ativo", false)
+    .is("aprovado_em", null);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 /** Aprova o acesso (ativa) e define o perfil; registra quem/quando aprovou. */
 export async function aprovarUsuario(id: string, perfil: Perfil): Promise<void> {
   if (!isSupabaseConfigured()) return;

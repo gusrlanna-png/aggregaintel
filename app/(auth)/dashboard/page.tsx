@@ -29,6 +29,7 @@ import {
 } from "@/components/charts/ranking-producoes";
 import { AlertasFeed } from "@/components/dashboard/alertas-feed";
 import { GlobalSearch } from "@/components/search/global-search";
+import { AcessoPendenteBanner } from "@/components/admin/acesso-pendente-banner";
 import { getProjecaoResumo } from "@/lib/supabase/emissores";
 import { countNFsMesAtual } from "@/lib/supabase/nf";
 import { getIntel } from "@/lib/supabase/intel";
@@ -128,6 +129,8 @@ export default function DashboardPage() {
       </div>
 
       <GlobalSearch variant="hero" />
+
+      <AcessoPendenteBanner />
 
       {isLoading ? (
         <div className="flex justify-center py-12">
